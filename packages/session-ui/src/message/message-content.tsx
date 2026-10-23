@@ -536,53 +536,49 @@ export function CurrentUserMessageDisplay(props: {
   )
 }
 
+const fileUrl = (file: PromptFileAttachment) =>
+  file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+
 function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: SessionUserActions }) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
-  const [state, setState] = createStore<{ source?: string; file?: PromptFileAttachment }>({})
-  const pending = new Map<string, Promise<PromptFileAttachment>>()
-  const lifetime = { active: true }
-  onCleanup(() => {
-    lifetime.active = false
-  })
-  const source = () => (props.file.source.type === "uri" ? props.file.source.uri : "")
 
-  const file = () =>
-    AttachmentReference.is(props.file) ? (state.source === source() ? state.file : undefined) : props.file
+  // Keyed by reference URI, so a refetched proxy of the same file neither reloads nor flashes.
+  const reference = createMemo(() =>
+    AttachmentReference.is(props.file) && props.file.source.type === "uri" ? props.file.source.uri : undefined,
+  )
+
+  const [loaded, setLoaded] = createSignal<{ reference: string; file: PromptFileAttachment }>()
+
+  const file = () => {
+    const key = reference()
+
+    if (!key) return props.file
+
+    return loaded()?.reference === key ? loaded()?.file : undefined
+  }
 
   const url = () => {
     const value = file()
 
-    return value && (value.source.type === "uri" ? value.source.uri : `data:${value.mime};base64,${value.data}`)
+    return value && fileUrl(value)
   }
 
   const name = () => props.file.name ?? i18n.t("ui.message.attachment.alt")
 
-  const load = () => {
-    const loaded = file()
+  const load = async () => {
+    const current = file()
 
-    if (loaded) return Promise.resolve(loaded)
-    const input = props.file
-    const key = source()
-    const existing = pending.get(key)
+    if (current) return current
+    const key = reference()!
 
-    if (existing) return existing
+    if (!data.readAttachment) throw new Error("Attachment reader is unavailable")
+    const value = await data.readAttachment(props.file)
 
-    if (!data.readAttachment) return Promise.reject(new Error("Attachment reader is unavailable"))
+    if (reference() === key) setLoaded({ reference: key, file: value })
 
-    const request = data
-      .readAttachment(input)
-      .then((value) => {
-        if (lifetime.active && source() === key) setState({ source: key, file: value })
-
-        return value
-      })
-      .finally(() => pending.delete(key))
-
-    pending.set(key, request)
-
-    return request
+    return value
   }
 
   return (
@@ -595,7 +591,7 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
           data-clickable="true"
           ref={(element) =>
             createEffect(() => {
-              if (!AttachmentReference.is(props.file)) return
+              if (!reference()) return
 
               const observer = new IntersectionObserver(
                 (entries) => {
@@ -614,12 +610,11 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
           }
           onClick={(event) => {
             const origin = event.currentTarget
-            const key = source()
+            const key = reference()
             void load()
               .then((value) => {
-                if (source() !== key || !origin.isConnected) return
-                const src = value.source.type === "uri" ? value.source.uri : `data:${value.mime};base64,${value.data}`
-                dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+                if (reference() !== key || !origin.isConnected) return
+                dialog.show(() => <ImagePreview src={fileUrl(value)} alt={name()} origin={origin} />)
               })
               .catch(() => data.onAttachmentError?.())
           }}
@@ -638,10 +633,13 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
         hover={name()}
         clickable={!!props.actions?.openAttachment}
         onClick={() => {
-          const key = source()
+          const open = props.actions?.openAttachment
+
+          if (!open) return
+          const key = reference()
           void load()
             .then((value) => {
-              if (lifetime.active && source() === key) props.actions?.openAttachment?.(value)
+              if (reference() === key) open(value)
             })
             .catch(() => data.onAttachmentError?.())
         }}

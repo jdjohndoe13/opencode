@@ -6,7 +6,7 @@ export async function fetchSessionExport(input: {
 }) {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc", attachments: "inline" }),
+    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),
   ])
 
   const pages = [first]
@@ -16,7 +16,6 @@ export async function fetchSessionExport(input: {
       await input.api.message.list({
         sessionID: input.sessionID,
         limit: 200,
-        attachments: "inline",
         cursor: pages.at(-1)!.cursor.next ?? undefined,
       }),
     )

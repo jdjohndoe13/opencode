@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import type { PromptFileAttachment, SessionMessageUser } from "@opencode/client/promise"
 import { createAttachmentReader } from "./attachment"
-import { hydratePromptMessage } from "@/composer/prompt"
 
 const original: SessionMessageUser = {
   id: "msg_original",
@@ -36,11 +35,7 @@ test("display, remount and prompt restoration share one original, including offl
   expect(await first).toEqual(original.files![0])
   expect(await concurrent).toEqual(original.files![0])
   expect(await reader.file({ ...reference })).toEqual(original.files![0])
-  expect(
-    await hydratePromptMessage({ ...original, files: [reference] }, (messageID) =>
-      reader.message({ sessionID: "ses_test", messageID }),
-    ),
-  ).toEqual(original)
+  expect(await reader.hydrate("ses_test", { ...original, files: [reference] })).toEqual(original)
   expect(calls).toBe(1)
 })
 
@@ -55,7 +50,7 @@ test("failed reads retry and resolved entries are LRU-bounded by count and byte 
     return { ...original, id: messageID, text: messageID === "msg_large" ? "x".repeat(9 * 1024 * 1024) : original.text }
   })
 
-  const read = (messageID: string) => reader.message({ sessionID: "ses_test", messageID })
+  const read = (messageID: string) => reader.hydrate("ses_test", { ...original, id: messageID, files: [reference] })
   await expect(read("msg_0")).rejects.toThrow("offline")
 
   for (const index of Array.from({ length: 32 }, (_, index) => index)) await read(`msg_${index}`)

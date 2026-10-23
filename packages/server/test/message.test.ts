@@ -7,7 +7,10 @@ import { ServerFetch } from "../src/fetch"
 
 const messages: SessionMessageInfo[] = [
   {
-    id: "msg_z", type: "user", text: "First request", time: { created: 300 },
+    id: "msg_z",
+    type: "user",
+    text: "First request",
+    time: { created: 300 },
     files: [
       { name: "image.png", data: "AQID", mime: "image/png", source: { type: "inline" } },
       { name: "empty.txt", data: "", mime: "text/plain", source: { type: "inline" } },
@@ -95,17 +98,28 @@ it.live("filters message types before paginating in either direction through the
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "shell" })).data).toEqual([])
       const projected = await fixture.api.message.list({ ...input, order: "asc", attachments: "reference" })
       expect(projected.data[0]).toMatchObject({
-        id: "msg_z", text: "First request",
+        id: "msg_z",
+        text: "First request",
         files: [
-          { name: "image.png", data: "", mime: "image/png", source: { type: "uri", uri: `opencode-attachment:${fixture.sessionID}/msg_z/0` } },
+          {
+            name: "image.png",
+            data: "",
+            mime: "image/png",
+            source: { type: "uri", uri: `opencode-attachment:${fixture.sessionID}/msg_z/0` },
+          },
           { name: "empty.txt", data: "", source: { type: "inline" } },
           { name: "note.txt", data: "YWJj", source: { type: "uri", uri: "file:///project/note.txt" } },
         ],
       })
-      expect(await fixture.api.session.message.get({ sessionID: fixture.sessionID, messageID: "msg_z" })).toEqual(messages[0])
-      expect((await fixture.api.message.list({ ...input, order: "asc", attachments: "inline" })).data[0]).toEqual(messages[0])
+      expect(await fixture.api.session.message.get({ sessionID: fixture.sessionID, messageID: "msg_z" })).toEqual(
+        messages[0],
+      )
+      // Inline is the default, so exports and other clients keep original bytes.
+      expect((await fixture.api.message.list({ ...input, order: "asc" })).data[0]).toEqual(messages[0])
       if (!projected.cursor.next) throw new Error("Expected projected cursor")
-      expect((await fixture.api.message.list({ ...input, cursor: projected.cursor.next, attachments: "reference" })).data).toEqual([messages[5], messages[7]])
+      expect(
+        (await fixture.api.message.list({ ...input, cursor: projected.cursor.next, attachments: "reference" })).data,
+      ).toEqual([messages[5], messages[7]])
       // Before excludes its anchor; the returned cursor continues further back through matching messages.
       const before = await fixture.api.message.list({ ...input, before: "msg_a" })
       expect(before.data.map((message) => message.id)).toEqual(["msg_x", "msg_b"])

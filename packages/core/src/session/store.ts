@@ -176,30 +176,27 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          (row) => {
-            if (input.attachments !== "reference" || row.type !== "user" || !("files" in row.data))
-              return SessionHistory.decodeMessageRow(row)
+        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, (row) => {
+          if (input.attachments !== "reference" || row.type !== "user" || !("files" in row.data))
+            return SessionHistory.decodeMessageRow(row)
 
-            return SessionHistory.decodeMessageRow({
-              ...row,
-              data: {
-                ...row.data,
-                files: row.data.files?.map((file, index) =>
-                  ((file.source.type === "inline" && file.data) ||
-                    (file.source.type === "uri" && file.source.uri.startsWith("data:")))
-                    ? {
-                        ...file,
-                        data: "",
-                        source: { type: "uri", uri: AttachmentReference.make(input.sessionID, row.id, index) },
-                      }
-                    : file,
-                ),
-              },
-            })
-          },
-        )
+          return SessionHistory.decodeMessageRow({
+            ...row,
+            data: {
+              ...row.data,
+              files: row.data.files?.map((file, index) =>
+                (file.source.type === "inline" && file.data) ||
+                (file.source.type === "uri" && file.source.uri.startsWith("data:"))
+                  ? {
+                      ...file,
+                      data: "",
+                      source: { type: "uri", uri: AttachmentReference.make(input.sessionID, row.id, index) },
+                    }
+                  : file,
+              ),
+            },
+          })
+        })
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {

@@ -5,7 +5,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
-import { extractPromptContext, extractPromptFromMessage, hydratePromptMessage, unchangedDraft } from "@/composer/prompt"
+import { extractPromptContext, extractPromptFromMessage, unchangedDraft } from "@/composer/prompt"
 import { promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
@@ -55,12 +55,13 @@ export function createSessionRevert(input: {
     const target = prompt.capture()
     const unchanged = unchangedDraft(target)
     const current = () => owner.current() && prompt.capture() === target && unchanged()
+    // Recheck the draft after every await: typing during hydration or server work must never be
+    // overwritten by this restore.
+    const step = async <A>(action: () => Promise<A>) => (await request(action)) && current()
     staging = true
 
     try {
-      const original = await hydratePromptMessage(message, (messageID) =>
-        server.attachments.message({ sessionID, messageID }),
-      ).catch(() => {
+      const original = await server.attachments.hydrate(sessionID, message).catch(() => {
         showToast({ title: language.t("common.requestFailed") })
       })
 
@@ -69,22 +70,19 @@ export function createSessionRevert(input: {
       // An undelivered prompt has no history to rewind. Withdraw it like the TUI
       // instead of interrupting the work it is waiting behind.
       if (data.session.input.has(sessionID, message.id)) {
-        if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id }))) || !current())
-          return
+        if (!(await step(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
         restore(target, original)
         owner.run(() => input.setActiveMessage(previous))
 
         return
       }
 
-      // Interrupt acknowledges before execution settles. Recheck the draft after every await:
-      // typing during hydration or server work must never be overwritten by this restore.
-      if (!(await request(() => server.api.session.interrupt({ sessionID }))) || !current()) return
+      // Interrupt acknowledges before execution settles, and staging a busy Session fails.
+      if (!(await step(() => server.api.session.interrupt({ sessionID })))) return
 
-      if (!(await request(() => server.api.session.wait({ sessionID }))) || !current()) return
+      if (!(await step(() => server.api.session.wait({ sessionID })))) return
 
-      if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id }))) || !current())
-        return
+      if (!(await step(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
       // Pending inputs remain until the revert commits, or redo delivers them.
       restore(target, original)
       owner.run(() => input.setActiveMessage(previous))

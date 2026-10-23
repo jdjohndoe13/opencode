@@ -6,7 +6,7 @@ import type {
   Prompt,
 } from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { AttachmentReference } from "@opencode/client/attachment-reference"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
@@ -80,25 +80,6 @@ export function unchangedDraft(target: ReturnType<ComposerState["capture"]>) {
   const before = snapshot()
 
   return () => snapshot() === before
-}
-
-/** Resolve before any destructive edit/revert/fork action, not after changing the draft. */
-export async function hydratePromptMessage(
-  message: SessionMessageUser,
-  read: (messageID: string) => Promise<SessionMessageInfo | undefined>,
-) {
-  if (!message.files?.some(AttachmentReference.is)) return message
-  const original = await read(message.id)
-
-  if (
-    original?.type !== "user" ||
-    original.id !== message.id ||
-    original.files?.length !== message.files.length ||
-    original.files?.some(AttachmentReference.is)
-  )
-    throw new Error("Original prompt is unavailable")
-
-  return original
 }
 
 // Restores the composer content that produced a prompt, losing nothing it carried. File references

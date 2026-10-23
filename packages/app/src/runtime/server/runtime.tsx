@@ -190,8 +190,7 @@ function createServerController(
   const sdk = createServerSdkContext(conn, scope)
 
   const source = createData({
-    // Only the desktop/web transcript store opts into references. The public SDK, extensions,
-    // exports, and other clients continue to receive original bytes by default.
+    // Only the timeline store opts into references; every other caller gets original bytes.
     api: () => ({
       ...sdk.api,
       message: {

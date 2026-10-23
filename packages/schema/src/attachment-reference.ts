@@ -10,19 +10,14 @@ export function is(file: FileAttachment) {
 }
 
 export function make(sessionID: string, messageID: string, index: number) {
-  return `${prefix}${encodeURIComponent(sessionID)}/${encodeURIComponent(messageID)}/${index}`
+  return `${prefix}${sessionID}/${messageID}/${index}`
 }
 
 export function parse(file: FileAttachment) {
   if (file.source.type !== "uri" || !file.source.uri.startsWith(prefix)) return
-  const match = /^opencode-attachment:(ses_[^/]+)\/(msg_[^/]+)\/(0|[1-9]\d*)$/.exec(file.source.uri)
+  const match = /^opencode-attachment:(ses_[^/]+)\/(msg_[^/]+)\/(\d+)$/.exec(file.source.uri)
 
-  const sessionID = match?.[1]
-  const messageID = match?.[2]
-  const index = match?.[3]
+  if (!match) throw new Error("Invalid attachment reference")
 
-  if (!sessionID || !messageID || index === undefined || !Number.isSafeInteger(Number(index)))
-    throw new Error("Invalid attachment reference")
-
-  return { sessionID: decodeURIComponent(sessionID), messageID: decodeURIComponent(messageID), index: Number(index) }
+  return { sessionID: match[1]!, messageID: match[2]!, index: Number(match[3]) }
 }

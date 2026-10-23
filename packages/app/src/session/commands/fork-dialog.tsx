@@ -12,7 +12,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { base64Encode } from "@opencode/util/encode"
-import { extractPromptContext, extractPromptFromMessage, hydratePromptMessage, unchangedDraft } from "@/composer/prompt"
+import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
 import { sessionHref } from "@/shell/routes/session"
@@ -75,23 +75,15 @@ export const DialogFork: Component = () => {
 
     if (message?.type !== "user") return
     const directory = location().directory
-    const target = prompt.capture()
-    const unchanged = unchangedDraft(target)
-    const key = server.key
-
-    const current = () =>
-      active && params.id === sessionID && server.key === key && prompt.capture() === target && unchanged()
-
     pending = true
 
     try {
-      const original = await hydratePromptMessage(message, (messageID) =>
-        serverSDK.attachments.message({ sessionID, messageID }),
-      ).catch(() => {
+      const original = await serverSDK.attachments.hydrate(sessionID, message).catch(() => {
         showToast({ title: language.t("common.requestFailed") })
       })
 
-      if (!original || !current()) return
+      // Closing the dialog while originals load cancels the fork.
+      if (!original || !active) return
 
       const restored = extractPromptFromMessage(original, {
         directory,
@@ -105,7 +97,6 @@ export const DialogFork: Component = () => {
       await serverSDK.api.session
         .fork({ sessionID, before: item.id })
         .then((forked) => {
-          if (!current()) return
           data.session.remember(forked)
           dialog.close()
           const target = prompt.capture({ dir, id: forked.id })
