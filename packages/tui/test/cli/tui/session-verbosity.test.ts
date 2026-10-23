@@ -103,11 +103,12 @@ test("low hydration nests subgroups inside one activity group per run", () => {
   const rows = reduceSessionRows(messages, new Set(), false, "low")
   expect(rows.map((row) => (row.type === "group" ? `${row.kind}:${row.size}` : row.type))).toEqual([
     "message",
+    "assistant-header",
     "activity:6",
     "part",
     "assistant-footer",
   ])
-  const activity = rows[1]
+  const activity = rows[2]
   if (activity.type !== "group") throw new Error("Expected activity")
   expect(activity.children.map((child) => (child.type === "group" ? child.kind : child.entry.type))).toEqual([
     "reasoning",
@@ -128,6 +129,7 @@ test("medium hydration keeps production shape plus instruction groups", () => {
   ]
   const rows = reduceSessionRows(messages, new Set(), false, "medium")
   expect(rows.map((row) => (row.type === "group" ? `${row.kind}:${row.size}` : row.type))).toEqual([
+    "assistant-header",
     "exploration:2",
     "instructions:2",
     "part",
@@ -159,8 +161,8 @@ test("permission-blocked tools inside an activity group are tracked as pending w
     "low",
   )
   partitionPending(rows, new Set(["sh"]))
-  const activity = rows[0]
-  if (activity.type !== "group" || activity.kind !== "activity") throw new Error("Expected activity")
+  const activity = rows.find((row) => row.type === "group")!
+  if (activity?.type !== "group" || activity.kind !== "activity") throw new Error("Expected activity")
   expect(activity.pending).toEqual([{ messageID: "a", partID: "sh" }])
   expect(groupRefs(activity).map((ref) => ref.partID)).toEqual(["r1", "r2"])
   expect(groupRefs(activity, true).map((ref) => ref.partID)).toEqual(["r1", "sh", "r2"])
@@ -231,7 +233,7 @@ test("activity summary counts distinct instruction files and skips redacted thou
     instruction("i1", ["AGENTS.md", "src/AGENTS.md"]),
     instruction("i2", ["src/AGENTS.md", "docs/AGENTS.md"]),
   ]
-  const activity = reduceSessionRows(messages, new Set(), false, "low")[0]
+  const activity = reduceSessionRows(messages, new Set(), false, "low").find((row) => row.type === "group")!
   if (activity.type !== "group") throw new Error("Expected activity")
   const message = (id: string) => messages.find((item) => item.id === id)
   expect(summarizeActivity(activity, message, [], true).label).toBe("1 thought, 1 read, 3 instructions")
@@ -246,7 +248,12 @@ test("questions stand alone at every level and end an activity run", () => {
     false,
     "low",
   )
-  expect(rows.map((row) => (row.type === "group" ? row.kind : row.type))).toEqual(["activity", "part", "activity"])
+  expect(rows.map((row) => (row.type === "group" ? row.kind : row.type))).toEqual([
+    "assistant-header",
+    "activity",
+    "part",
+    "activity",
+  ])
 })
 
 test("a thought still streaming counts as finished once a later row closes its group", () => {
@@ -264,7 +271,7 @@ test("until something finishes, the label is the first running item's status", (
     ...assistant("a", [tool("e1", "edit", "running"), tool("s1", "shell", "running")]),
     time: { created: 1 },
   }
-  const activity = reduceSessionRows([open], new Set(), false, "low")[0]
+  const activity = reduceSessionRows([open], new Set(), false, "low").find((row) => row.type === "group")!
   if (activity.type !== "group") throw new Error("Expected activity")
   expect(summarizeActivity(activity, () => open, [], false)).toEqual({
     label: "Running edit…",

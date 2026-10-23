@@ -36,7 +36,10 @@ export async function completeGroupBoundary(input: {
   loadMore: () => Promise<void>
   active: () => boolean
 }) {
-  while (input.active() && input.rows[0]?.type === "group" && input.more()) {
+  // A reply header is emitted from the same message as its parts, so it does
+  // not precede the group it opens; the oldest real row is what counts.
+  const oldest = (rows: readonly SessionRow[]) => rows.find((row) => row.type !== "assistant-header")
+  while (input.active() && oldest(input.rows)?.type === "group" && input.more()) {
     const before = input.messages()
     await input.loadMore()
     // A page that adds nothing would otherwise loop forever.
@@ -198,9 +201,29 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
+  const appendHeader = (messageID: string) =>
+    setRows(
+      produce((draft) => {
+        if (draft.some((row) => row.type === "assistant-header" && row.messageID === messageID)) return
+        const index = queuedStart(draft)
+        completePrevious(draft, index)
+        draft.splice(index, 0, { type: "assistant-header", messageID })
+      }),
+    )
+
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
+        // The reply stamp opens the first assistant step of a turn; the step
+        // event usually precedes parts, but a resumed session can stream parts
+        // without a step event, so the first part guarantees the header lands.
+        if (firstAssistantOfTurn(data.session.message.list(sessionID()), ref.messageID)) {
+          if (!draft.some((row) => row.type === "assistant-header" && row.messageID === ref.messageID)) {
+            const index = queuedStart(draft)
+            completePrevious(draft, index)
+            draft.splice(index, 0, { type: "assistant-header", messageID: ref.messageID })
+          }
+        }
         if (!hasPart(draft, ref)) {
           append(draft, ref, part, queuedStart(draft), verbosity())
           return
@@ -304,7 +327,10 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
     }),
     data.on("session.step.started", (event) => {
-      if (event.data.sessionID === sessionID()) removeFooter(event.data.assistantMessageID)
+      if (event.data.sessionID !== sessionID()) return
+      if (firstAssistantOfTurn(data.session.message.list(sessionID()), event.data.assistantMessageID))
+        appendHeader(event.data.assistantMessageID)
+      removeFooter(event.data.assistantMessageID)
     }),
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
@@ -329,6 +355,7 @@ function rowKey(row: SessionRow) {
     case "part":
       return JSON.stringify([row.type, row.ref.messageID, row.ref.partID])
     case "message":
+    case "assistant-header":
     case "assistant-footer":
       return JSON.stringify([row.type, row.messageID])
     case "compaction-queued":
@@ -390,10 +417,16 @@ export function reduceSessionRows(
       return rows
     }
     usage?.steps.push(message)
+    const header = firstAssistantOfTurn(messages, message.id)
     const ordinals = { text: 0, reasoning: 0 }
+    let first = true
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
+      // The stamp opens the reply, so it lands with the first visible part and
+      // never orphans above a step that rendered nothing.
+      if (first && header) rows.push({ entry: { type: "assistant-header", messageID: message.id } })
+      first = false
       rows.push({
         entry: { type: "part", ref: { messageID: message.id, partID } },
         part,
@@ -461,7 +494,7 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
       ? row.ref.messageID
       : row.type === "group"
         ? groupRefs(row)[0]?.messageID
-        : row.type === "assistant-footer"
+        : row.type === "assistant-header" || row.type === "assistant-footer"
           ? row.messageID
           : row.type === "turn-usage"
             ? row.messageIDs[0]
@@ -478,4 +511,23 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   if (!match) return
   const ordinal = Number(match[2])
   return message.content.filter((part) => part.type === match[1])[ordinal]
+}
+
+/**
+ * A reply's start stamp belongs to the first assistant step of its turn.
+ * Synthetic notices, system prompts and skill loads can sit between steps
+ * without opening a new turn; an idle marker closes the turn, so the next
+ * step starts a new one.
+ */
+export function firstAssistantOfTurn(messages: SessionMessageInfo[], messageID: string) {
+  const index = messages.findIndex((message) => message.id === messageID)
+  if (index === -1) return false
+  for (let i = index - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.type === "assistant") return false
+    if (message.type === "idle") return true
+    if (message.type === "synthetic" || message.type === "system" || message.type === "skill") continue
+    return true
+  }
+  return true
 }

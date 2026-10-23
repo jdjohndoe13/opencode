@@ -22,6 +22,12 @@ export function stamp(input: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+export function elapsed(input: number): string {
+  const total = Math.max(0, Math.floor(input / 1000))
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${pad(Math.floor(total / 60))} minutes ${pad(total % 60)} seconds`
+}
+
 export function number(num: number): string {
   // 999950+ would round to "1000.0K"
   if (num >= 999950) {

@@ -975,7 +975,10 @@ export function Session(props: {
             scroll.stickyScroll = false
             batch(() => {
               setHiddenRows(0)
-              setVisibleRowsEnd(TRANSCRIPT_BACKFILL_CHUNK)
+              // Budget by rendered entries, not row index: reply-header rows are
+              // zero-weight, so a raw index would mount fewer messages than the
+              // head budget promises.
+              setVisibleRowsEnd(rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK))
               setFirstJump(() => cancel)
             })
           }
@@ -995,7 +998,12 @@ export function Session(props: {
               () => {
                 commit()
                 if (firstJump() !== cancel || scroll.isDestroyed) return
-                if (rows.length <= TRANSCRIPT_BACKFILL_CHUNK) setVisibleRowsEnd(undefined)
+                // Rows are published now; the pre-publish commit budgeted against the
+                // old row list (and header rows are zero-weight), so re-derive the
+                // head budget from the full weights.
+                setVisibleRowsEnd(
+                  rows.length <= TRANSCRIPT_BACKFILL_CHUNK ? undefined : rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK),
+                )
                 scroll.scrollTo(0)
                 afterLayout(() => {
                   if (firstJump() !== cancel) return
@@ -1706,6 +1714,17 @@ function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewPro
       <Match when={props.row.type === "compaction-queued"}>
         <CompactionQueued />
       </Match>
+      <Match when={props.row.type === "assistant-header" ? props.row : undefined}>
+        {(row) => (
+          <Show when={props.message(row().messageID)}>
+            {(message) => (
+              <Show when={message().type === "assistant"}>
+                <AssistantHeader message={message() as SessionMessageAssistant} />
+              </Show>
+            )}
+          </Show>
+        )}
+      </Match>
       <Match when={props.row.type === "part" ? props.row : undefined}>
         {(row) => <SessionPartView partRef={row().ref} message={props.message} images={props.images} />}
       </Match>
@@ -2002,6 +2021,15 @@ function SessionPartView(props: {
         </Switch>
       )}
     </Show>
+  )
+}
+
+function AssistantHeader(props: { message: SessionMessageAssistant }) {
+  const theme = useTheme()
+  return (
+    <box paddingLeft={3} flexShrink={0}>
+      <text fg={theme.text.muted}>[{Locale.stamp(props.message.time.created)}]</text>
+    </box>
   )
 }
 
@@ -2644,11 +2672,34 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
     </Switch>
   )
   return [
+    <ToolTimestamp part={props.part} />,
     content,
     <Show when={props.images !== false}>
       <ToolImages parts={[props.part]} />
     </Show>,
   ]
+}
+
+function ToolTimestamp(props: { part: SessionMessageAssistantTool }) {
+  const theme = useTheme()
+  const started = () => props.part.time.ran ?? props.part.time.created
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (props.part.time.completed !== undefined) return
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const label = createMemo(() => {
+    const stamp = Locale.stamp(started())
+    const done = props.part.time.completed
+    if (done === undefined) return `[${stamp}] running for ${Locale.elapsed(now() - started())}`
+    return `[${stamp}] ran for ${Locale.elapsed(done - started())}`
+  })
+  return (
+    <box paddingLeft={3} flexShrink={0}>
+      <text fg={theme.text.muted}>{label()}</text>
+    </box>
+  )
 }
 
 function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
