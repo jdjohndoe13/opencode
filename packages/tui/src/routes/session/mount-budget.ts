@@ -11,6 +11,7 @@ export function rowWeight(
   row: SessionRow,
   input: { expanded: (groupID: string, kind: GroupKind) => boolean; grouped: (kind: GroupKind) => boolean },
 ) {
+  if (row.type === "assistant-header") return 0
   if (row.type !== "group") return 1
   const visit = (node: Extract<SessionNode, { type: "group" }>, level: number): number => {
     if (!input.grouped(node.kind)) return node.size
