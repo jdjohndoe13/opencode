@@ -2044,6 +2044,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
       <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}>
         <text>
+          <span style={{ fg: theme.text.muted }}>
+            [{Locale.stamp(props.message.time.completed ?? props.message.time.created)}] ·{" "}
+          </span>
           <span style={{ fg: props.message.error ? theme.text.muted : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
@@ -2422,6 +2425,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
+          <text fg={theme.text.muted}>{`[${Locale.stamp(props.message.time.created)}]`}</text>
           <text fg={theme.text.base}>{props.message.text}</text>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
