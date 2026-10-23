@@ -1198,7 +1198,7 @@ test("loads older pages until the oldest exploration group is complete before re
     expect(pages).toEqual(["32-52", "12-32", "0-12"])
     // Sync is reported only once the group's true first read is loaded.
     expect(synced[0]).toMatchObject({ type: "message", messageID: "msg_000" })
-    const group = rows[1]
+    const group = rows[2]
     if (group?.type !== "group") throw new Error("Expected exploration group")
     expect(group.size).toBe(50)
     expect(groupRefs(group)[0]).toEqual({ messageID: "msg_001", partID: "read-0" })
@@ -1891,7 +1891,7 @@ test("restores queued compaction from durable pending input", async () => {
       },
     })
     await wait(() => rows.some((row) => row.type === "part"))
-    expect(rows.map((row) => row.type)).toEqual(["part", "compaction-queued", "compaction-queued"])
+    expect(rows.map((row) => row.type)).toEqual(["assistant-header", "part", "compaction-queued", "compaction-queued"])
 
     emitEvent(events, {
       id: "evt_compaction_started",

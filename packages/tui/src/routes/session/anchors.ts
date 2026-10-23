@@ -20,6 +20,7 @@ export function entryRef(entry: SessionEntry): PartRef | undefined {
   // Saved identities must not follow an in-place Solid store reconciliation.
   if (entry.type === "part") return { messageID: entry.ref.messageID, partID: entry.ref.partID }
   if (entry.type === "message") return { messageID: entry.messageID, partID: "message" }
+  if (entry.type === "assistant-header") return { messageID: entry.messageID, partID: "message" }
 }
 
 export function groupID(node: Extract<SessionNode, { type: "group" }>, level: number) {

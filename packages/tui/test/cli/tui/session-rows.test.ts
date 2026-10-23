@@ -195,7 +195,7 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   ]
   const rows = reduceSessionRows(messages)
 
-  expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
+  expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined, undefined])
 })
 
 test("assigns stable IDs to tool rows for direct navigation", () => {
@@ -211,6 +211,7 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
 
   expect(rows.map((row, index) => sessionRowID(row, boundaries[index]))).toEqual([
     "assistant-1",
+    "session-part:assistant-1:text:0",
     "session-part:assistant-1:shell-1",
     "assistant-2",
   ])
@@ -232,6 +233,7 @@ test("groups exploration parts across assistant messages until a delimiter", () 
 
   expect(reduceSessionRows(messages)).toEqual([
     { type: "message", messageID: "user-1" },
+    { type: "assistant-header", messageID: "assistant-1" },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
     {
       type: "group",
@@ -259,6 +261,7 @@ test("keeps non-exploration tools as individual part rows", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "exploration",
@@ -290,6 +293,7 @@ test("assigns stable kind ordinals within an assistant message", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
     {
       type: "group",
@@ -320,6 +324,7 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "reasoning",
@@ -351,6 +356,7 @@ test("groups across empty assistant reasoning parts", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "reasoning",
@@ -381,6 +387,7 @@ test("completes exploration groups when another row follows", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "exploration",
@@ -390,6 +397,7 @@ test("completes exploration groups when another row follows", () => {
       children: [partChild("assistant-1", "read-1")],
     },
     { type: "message", messageID: "user-1" },
+    { type: "assistant-header", messageID: "assistant-2" },
     {
       type: "group",
       kind: "exploration",
@@ -426,6 +434,7 @@ test("hides synthetic messages without descriptions", () => {
   const rows = reduceSessionRows(messages)
   expect(rows).toEqual([
     { type: "message", messageID: "shell-message" },
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "exploration",
@@ -452,6 +461,7 @@ test("renders synthetic messages with descriptions", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
+    { type: "assistant-header", messageID: "assistant-1" },
     {
       type: "group",
       kind: "exploration",
