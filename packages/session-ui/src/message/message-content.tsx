@@ -581,6 +581,16 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
     return value
   }
 
+  // Explicit clicks that settle after the row unmounts (e.g. a session switch) must not open or report.
+  let disposed = false
+  onCleanup(() => {
+    disposed = true
+  })
+
+  const fail = () => {
+    if (!disposed) data.onAttachmentError?.()
+  }
+
   return (
     <Show
       when={!props.file.mime.startsWith("image/")}
@@ -616,7 +626,7 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
                 if (reference() !== key || !origin.isConnected) return
                 dialog.show(() => <ImagePreview src={fileUrl(value)} alt={name()} origin={origin} />)
               })
-              .catch(() => data.onAttachmentError?.())
+              .catch(fail)
           }}
         >
           <Show
@@ -639,9 +649,9 @@ function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: Se
           const key = reference()
           void load()
             .then((value) => {
-              if (reference() === key) open(value)
+              if (!disposed && reference() === key) open(value)
             })
-            .catch(() => data.onAttachmentError?.())
+            .catch(fail)
         }}
       >
         {typeLabel(name(), props.file.mime, i18n.t("ui.common.file"))}
