@@ -24,6 +24,8 @@ export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "ag
   files?: PromptFile[]
   pasted: PastedText[]
   mode?: "normal" | "shell"
+  /** Session the entry was submitted in; undefined keeps it on the home composer. */
+  sessionID?: string
 }
 
 export type PromptPartRef = {
@@ -63,8 +65,12 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
 
 export const MAX_HISTORY_ENTRIES = 50
 
+// With per-session scoping the global cap would make sessions share history
+// depth, so the cap applies per scope; TOTAL bounds the file itself.
+const MAX_HISTORY_TOTAL = 1000
+
 export function parsePromptHistory(text: string) {
-  return text
+  const lines = text
     .split("\n")
     .filter(Boolean)
     .map((line) => {
@@ -75,7 +81,20 @@ export function parsePromptHistory(text: string) {
       }
     })
     .filter((line): line is PromptInfo => line !== undefined)
-    .slice(-MAX_HISTORY_ENTRIES)
+  return trimPromptHistory(lines)
+}
+
+export function trimPromptHistory(entries: PromptInfo[]) {
+  const seen = new Map<string | undefined, number>()
+  const kept: PromptInfo[] = []
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]!
+    const count = (seen.get(entry.sessionID) ?? 0) + 1
+    if (count > MAX_HISTORY_ENTRIES) continue
+    seen.set(entry.sessionID, count)
+    kept.push(entry)
+  }
+  return kept.reverse().slice(-MAX_HISTORY_TOTAL)
 }
 
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
@@ -112,15 +131,15 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
-        if (isDuplicateEntry(store.history.at(-1), entry)) return
+        const scoped = store.history.filter((item) => item.sessionID === entry.sessionID)
+        if (isDuplicateEntry(scoped.at(-1), entry)) return
         let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
-            if (draft.history.length > MAX_HISTORY_ENTRIES) {
-              draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
-              trimmed = true
-            }
+            const kept = trimPromptHistory(draft.history)
+            trimmed = kept.length !== draft.history.length
+            draft.history = kept
           }),
         )
 
@@ -138,21 +157,26 @@ export { PromptHistoryProvider }
 
 export function usePromptHistory(currentDraft = emptyPrompt) {
   const history = useHistoryEntries()
-  let index = 0
+  // Navigation cursor is per scope: the newest scope is the one currently
+  // being walked, so switching sessions never inherits another session's
+  // position. scope === undefined is the home composer bucket.
+  const cursors = new Map<string | undefined, number>()
   let draft: PromptInfo | undefined
   function reset() {
-    index = 0
+    cursors.clear()
     draft = undefined
   }
   return {
-    move(direction: 1 | -1, input: string) {
+    move(direction: 1 | -1, input: string, sessionID?: string) {
+      const entries = history.entries.filter((item) => item.sessionID === sessionID)
+      const index = cursors.get(sessionID) ?? 0
       const next = index + direction
-      if (next < -history.entries.length || next > 0) return
-      if (index < 0 && input && history.entries.at(index)?.text !== input) return
+      if (next < -entries.length || next > 0) return
+      if (index < 0 && input && entries.at(index)?.text !== input) return
       if (index === 0) draft = structuredClone({ ...currentDraft(), text: input })
-      index = next
+      cursors.set(sessionID, next)
       if (next !== 0) {
-        const entry = history.entries.at(next)
+        const entry = entries.at(next)
         return entry ? { ...emptyPrompt(), ...structuredClone(unwrap(entry)) } : undefined
       }
       const restored = draft

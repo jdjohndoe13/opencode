@@ -1037,7 +1037,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(-1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1077,7 +1077,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1304,7 +1304,7 @@ export function Prompt(props: PromptProps) {
       })
       return true
     }
-    history.append(entry)
+    history.append({ ...entry, sessionID: target })
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
@@ -1526,6 +1526,7 @@ export function Prompt(props: PromptProps) {
       history.append({
         ...store.prompt,
         mode: store.mode,
+        sessionID: props.sessionID,
       })
     }
     resetComposer()
