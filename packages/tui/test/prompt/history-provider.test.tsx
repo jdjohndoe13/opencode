@@ -21,7 +21,7 @@ test("down rejects at the newest history item with an empty prompt", async () =>
   }
 })
 
-test("shares prompt history across sessions and the home composer", async () => {
+test("keeps unscoped entries on the home composer", async () => {
   await using tmp = await tmpdir()
   const setup = await renderHistory(tmp.path)
   try {
@@ -32,6 +32,26 @@ test("shares prompt history across sessions and the home composer", async () => 
     expect(setup.history.move(-1, "")?.text).toBe("a-two")
     expect(setup.history.move(-1, "a-two")?.text).toBe("b-one")
     expect(setup.history.move(-1, "b-one")?.text).toBe("a-one")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("scopes history to the session that submitted it", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append({ text: "home", files: [], agents: [], pasted: [] })
+    setup.history.append({ text: "s1-one", files: [], agents: [], pasted: [], sessionID: "s1" })
+    setup.history.append({ text: "s2-one", files: [], agents: [], pasted: [], sessionID: "s2" })
+    setup.history.append({ text: "s1-two", files: [], agents: [], pasted: [], sessionID: "s1" })
+
+    // Each session only walks its own entries; the home composer only sees unscoped ones.
+    expect(setup.history.move(-1, "", "s1")?.text).toBe("s1-two")
+    expect(setup.history.move(-1, "s1-two", "s1")?.text).toBe("s1-one")
+    expect(setup.history.move(-1, "s1-one", "s1")?.text).toBeUndefined()
+    expect(setup.history.move(-1, "", "s2")?.text).toBe("s2-one")
+    expect(setup.history.move(-1, "", undefined)?.text).toBe("home")
   } finally {
     setup.app.renderer.destroy()
   }
