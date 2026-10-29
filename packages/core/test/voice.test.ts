@@ -169,8 +169,8 @@ it.effect(
           req.headers["x-opencode-org-id"],
         ]),
       ).toEqual([
-        ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer console-access", "wrk_console"],
-        ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer opencode-env-key", undefined],
+        ["http://127.0.0.1:1/live/sessions", "Bearer console-access", "wrk_console"],
+        ["http://127.0.0.1:1/live/sessions", "Bearer opencode-env-key", undefined],
         ["https://api.openai.com/v1/live/sessions", "Bearer sk-active", undefined],
       ])
 

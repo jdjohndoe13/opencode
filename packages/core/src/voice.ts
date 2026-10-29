@@ -134,7 +134,9 @@ export const node = makeLocationNode({
 })
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
-const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/inference/openai/v1" } as const
+// Local safety patch: the OpenCode-hosted inference endpoint is replaced with a dead
+// loopback address so a fallback to this provider can never send data to an external LLM.
+const openCodeLive = { provider: "opencode", baseURL: "http://127.0.0.1:1" } as const
 
 /**
  * What a credential starts a session with: a provider's API key on its own API, or an OpenCode Console API key or
