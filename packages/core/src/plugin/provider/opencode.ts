@@ -175,7 +175,8 @@ export const OpencodePlugin = define<
 >({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
-    const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
+    // Local safety patch: free hosted models are OFF by default. Set OPENCODE_DISABLE_FREE_MODELS=0 to opt in.
+    const disableFree = (process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "") !== "0"
     const client = yield* HttpClient.HttpClient
     // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
     // and whether it evaluates the policies it is being sent.

@@ -1050,95 +1050,99 @@ describe("ConfigProviderPlugin.Plugin", () => {
   )
 
   it.effect("keeps configured model variant bodies unchanged", () =>
-    Effect.gen(function* () {
-      const models = yield* Model.Service
-      const providerID = Provider.ID.opencode
-      const modelID = Model.ID.make("alpha-gpt-next")
-      const entries = [
-        new Document({
-          type: "document",
-          info: decode({
-            providers: {
-              opencode: {
-                package: "aisdk:@ai-sdk/openai",
-                settings: { baseURL: "https://opencode.test/v1" },
-                models: {
-                  "alpha-gpt-next": {
-                    variants: [
-                      {
-                        id: "high",
-                        body: {
-                          reasoningEffort: "high",
-                          reasoningSummary: "auto",
-                          include: ["reasoning.encrypted_content"],
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0" }, () =>
+      Effect.gen(function* () {
+        const models = yield* Model.Service
+        const providerID = Provider.ID.opencode
+        const modelID = Model.ID.make("alpha-gpt-next")
+        const entries = [
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                opencode: {
+                  package: "aisdk:@ai-sdk/openai",
+                  settings: { baseURL: "https://opencode.test/v1" },
+                  models: {
+                    "alpha-gpt-next": {
+                      variants: [
+                        {
+                          id: "high",
+                          body: {
+                            reasoningEffort: "high",
+                            reasoningSummary: "auto",
+                            include: ["reasoning.encrypted_content"],
+                          },
                         },
-                      },
-                    ],
+                      ],
+                    },
                   },
                 },
               },
-            },
+            }),
           }),
-        }),
-      ]
+        ]
 
-      yield* addPlugin(entries)
+        yield* addPlugin(entries)
 
-      const model = required(yield* models.get(providerID, modelID))
-      expect(model.variants).toMatchObject([
-        {
-          id: "high",
-          body: {
-            reasoningEffort: "high",
-            reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"],
+        const model = required(yield* models.get(providerID, modelID))
+        expect(model.variants).toMatchObject([
+          {
+            id: "high",
+            body: {
+              reasoningEffort: "high",
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
           },
-        },
-      ])
-    }),
+        ])
+      }),
+    ),
   )
 
   it.effect("keeps layered model variant bodies unchanged", () =>
-    Effect.gen(function* () {
-      const models = yield* Model.Service
-      const providerID = Provider.ID.opencode
-      const modelID = Model.ID.make("alpha-gpt-next")
-      const entries = [
-        new Document({
-          type: "document",
-          info: decode({
-            providers: {
-              opencode: {
-                package: "aisdk:@ai-sdk/openai",
-                settings: { baseURL: "https://opencode.test/v1" },
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0" }, () =>
+      Effect.gen(function* () {
+        const models = yield* Model.Service
+        const providerID = Provider.ID.opencode
+        const modelID = Model.ID.make("alpha-gpt-next")
+        const entries = [
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                opencode: {
+                  package: "aisdk:@ai-sdk/openai",
+                  settings: { baseURL: "https://opencode.test/v1" },
+                },
               },
-            },
+            }),
           }),
-        }),
-        new Document({
-          type: "document",
-          info: decode({
-            providers: {
-              opencode: {
-                models: {
-                  "alpha-gpt-next": {
-                    variants: [{ id: "high", body: { reasoningEffort: "high" } }],
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                opencode: {
+                  models: {
+                    "alpha-gpt-next": {
+                      variants: [{ id: "high", body: { reasoningEffort: "high" } }],
+                    },
                   },
                 },
               },
-            },
+            }),
           }),
-        }),
-      ]
+        ]
 
-      yield* addPlugin(entries)
+        yield* addPlugin(entries)
 
-      const model = required(yield* models.get(providerID, modelID))
-      expect(model.variants?.[0]).toMatchObject({
-        id: "high",
-        body: { reasoningEffort: "high" },
-      })
-    }),
+        const model = required(yield* models.get(providerID, modelID))
+        expect(model.variants?.[0]).toMatchObject({
+          id: "high",
+          body: { reasoningEffort: "high" },
+        })
+      }),
+    ),
   )
 
   it.effect("loads configured providers and applies later model overrides", () =>

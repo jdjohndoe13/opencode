@@ -170,10 +170,45 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
+// ── Local safety patch ──────────────────────────────────────────────────────
+// Never let a model resolve to an OpenCode-hosted inference endpoint. Any
+// catalog entry whose API points at an opencode.ai inference URL is rewritten
+// to a dead loopback address and renamed, so a failed or partial config load
+// can never silently send session data to an external LLM. Applied to every
+// catalog source (bundled snapshot, KV cache, live fetch, custom mirrors).
+const SANDBOX_URL = "http://127.0.0.1:1"
+const SANDBOX_NAME = "LLM configuration error"
+const OPENCODE_INFERENCE = /^https:\/\/(?:[a-z0-9-]+\.)*opencode\.ai\/inference\//i
+
+function sandboxCatalog(catalog: Record<string, unknown>): Record<string, unknown> {
+  for (const provider of Object.values(catalog)) {
+    if (!provider || typeof provider !== "object") continue
+    const models = (provider as Record<string, unknown>).models
+    if (!models || typeof models !== "object") continue
+    for (const model of Object.values(models as Record<string, unknown>)) {
+      if (!model || typeof model !== "object") continue
+      const entry = model as Record<string, unknown>
+      const api = entry.api
+      if (!api || typeof api !== "object") continue
+      let blocked = false
+      for (const route of Object.values(api as Record<string, unknown>)) {
+        if (!route || typeof route !== "object") continue
+        const url = (route as Record<string, unknown>).base_url
+        if (typeof url === "string" && OPENCODE_INFERENCE.test(url)) {
+          ;(route as Record<string, unknown>).base_url = SANDBOX_URL
+          blocked = true
+        }
+      }
+      if (blocked) entry.name = SANDBOX_NAME
+    }
+  }
+  return catalog
+}
+
 const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
-  const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
+  const snapshots = Object.values(sandboxCatalog(isV1(catalog) ? toV2(catalog) : catalog)).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
     const providerID = Provider.ID.make(item.id)
