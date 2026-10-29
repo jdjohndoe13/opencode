@@ -1,4 +1,5 @@
 import { Teardown } from "@opencode/util/teardown"
+import { DeathLog } from "@opencode/client/effect/deathlog"
 import { Duration, Effect } from "effect"
 
 /** After SIGTERM or SIGINT, teardown gets this long before the process reports what it is stuck on and exits. */
@@ -17,10 +18,15 @@ export const install = Effect.fnUntraced(function* (input: Duration.Input = DEAD
   let started = false
   const expire = (signal: NodeJS.Signals) =>
     Effect.gen(function* () {
+      DeathLog.log("shutdown started", { signal })
       yield* Effect.logInfo("shutdown started", { signal })
       yield* Effect.sleep(deadline)
       const pending = Teardown.pending()
       process.stderr.write(report(`shutdown did not finish within ${Duration.format(deadline)}`, pending))
+      DeathLog.log("shutdown deadline exceeded", {
+        deadline: Duration.format(deadline),
+        pending: pending.map((item) => `${item.label} for ${item.ms}ms`),
+      })
       yield* Effect.logError("shutdown deadline exceeded", {
         deadline: Duration.format(deadline),
         pending: pending.map((item) => `${item.label} for ${item.ms}ms`),
@@ -30,6 +36,7 @@ export const install = Effect.fnUntraced(function* (input: Duration.Input = DEAD
     })
   const onSignal = (signal: NodeJS.Signals) => {
     if (started) {
+      DeathLog.log("second signal during shutdown", { signal })
       process.stderr.write(report(`received ${signal} again during shutdown`, Teardown.pending()))
       process.exit(1)
     }
