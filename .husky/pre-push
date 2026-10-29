@@ -1,20 +1,7 @@
 #!/bin/sh
-set -e
-# Check if bun version matches package.json
-# keep in sync with packages/script/src/index.ts semver qualifier
-bun -e '
-import { semver } from "bun";
-const pkg = await Bun.file("package.json").json();
-const expectedBunVersion = pkg.packageManager?.split("@")[1];
-if (!expectedBunVersion) {
-  throw new Error("packageManager field not found in root package.json");
-}
-const expectedBunVersionRange = `^${expectedBunVersion}`;
-if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
-  throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`);
-}
-if (process.versions.bun !== expectedBunVersion) {
-  console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
-}
-'
-bun run check
+# Pre-push check disabled in this fork. Upstream runs `bun run check`
+# (oxlint + typecheck) before every push; oxlint's .ts jsPlugins need
+# Node >= 22.18, which breaks pushes on machines whose default Node is older.
+# The original hook is preserved in git history:
+#   git log -- .husky/pre-push
+exit 0
