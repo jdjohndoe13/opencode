@@ -18,8 +18,10 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+import { DeathLog } from "@opencode/client/effect/deathlog"
 
 ensurePluginRuntime()
+DeathLog.install(OPENCODE_VERSION)
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
@@ -139,7 +141,12 @@ Effect.gen(function* () {
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
-  Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
+  Effect.tap(() =>
+    Effect.sync(() => {
+      DeathLog.log("handler returned, exiting", { exitCode: process.exitCode ?? 0 })
+      process.exit(process.exitCode ?? 0)
+    }),
+  ),
   // runMain's default reporter logs the fatal cause to stdout. Write it to stderr instead: the
   // desktop and `Service.ensure` only capture stderr from `serve --service`, so this is the only
   // channel through which a startup failure's reason reaches the user.

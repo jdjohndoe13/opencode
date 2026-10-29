@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
+import { DeathLog } from "./deathlog.js"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
@@ -182,6 +183,8 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
+  // Instrumentation: record the caller so an external kill can be attributed to its origin.
+  DeathLog.caller("terminate", { targetPID: info.pid, targetURL: info.url, targetVersion: info.version })
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
   // The registration can disappear or change hands before this process exits. Only the PID we

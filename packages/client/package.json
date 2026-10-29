@@ -24,6 +24,7 @@
     "./effect": "./src/effect/index.ts",
     "./effect/api": "./src/effect/api.ts",
     "./effect/service": "./src/effect/service.ts",
+    "./effect/deathlog": "./src/effect/deathlog.ts",
     "./mcp": "./src/mcp.ts"
   },
   "scripts": {

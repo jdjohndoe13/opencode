@@ -1,6 +1,7 @@
 export * as ServiceRegistration from "./service-registration"
 
 import { Service, type Info } from "@opencode/client/effect/service"
+import { DeathLog } from "@opencode/client/effect/deathlog"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
@@ -51,7 +52,10 @@ export const register = Effect.fnUntraced(function* (options: {
         serviceID: options.id,
         servicePID: process.pid,
         registration: options.file,
-      }).pipe(Effect.andThen(Effect.failCause(cause))),
+      }).pipe(
+        Effect.tap(() => Effect.sync(() => DeathLog.log("self-eviction: registration check failed"))),
+        Effect.andThen(Effect.failCause(cause)),
+      ),
     ),
     Effect.tap((found) =>
       owns(found)
@@ -64,7 +68,17 @@ export const register = Effect.fnUntraced(function* (options: {
             observedServicePID: found.pid,
             observedVersion: found.version,
             observedURL: found.url,
-          }),
+          }).pipe(
+            Effect.tap(() =>
+              Effect.sync(() =>
+                DeathLog.log("self-eviction: registration replaced", {
+                  byPID: found.pid,
+                  byVersion: found.version,
+                  byURL: found.url,
+                }),
+              ),
+            ),
+          ),
     ),
     Effect.filterOrFail(owns),
     Effect.repeat(Schedule.spaced("5 seconds")),
