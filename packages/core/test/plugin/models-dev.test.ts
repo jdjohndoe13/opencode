@@ -1071,10 +1071,11 @@ describe("ModelsDevPlugin", () => {
   )
 
   it.effect("converts reasoning options into settings variants", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const modelState = yield* Model.Service
-      const integrations = yield* Integration.Service
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0" }, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const modelState = yield* Model.Service
+        const integrations = yield* Integration.Service
       yield* ModelsDevPlugin.effect(
         host({
           provider: providerHost(providers),
@@ -1402,5 +1403,6 @@ describe("ModelsDevPlugin", () => {
         },
       ])
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev-reasoning.json")))),
+    ),
   )
 })

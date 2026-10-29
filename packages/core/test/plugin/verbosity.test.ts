@@ -9,6 +9,7 @@ import { VerbosityPlugin } from "@opencode/core/plugin/verbosity"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -30,7 +31,8 @@ const request = (model: Model.Ref, options: SessionHooks["context"]["options"] =
 })
 
 it.effect("sets known OpenAI Responses defaults without overriding configured or unknown models", () =>
-  Effect.gen(function* () {
+  withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0" }, () =>
+    Effect.gen(function* () {
     const providers = yield* Provider.Service
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
@@ -156,8 +158,9 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
       expect(event.options.textVerbosity).toBe("low")
     }
 
-    const overridden = request(ref("openai", "gpt-5.5"), { textVerbosity: "high" })
-    yield* hooks.trigger("session", "context", overridden)
-    expect(overridden.options.textVerbosity).toBe("high")
-  }),
+      const overridden = request(ref("openai", "gpt-5.5"), { textVerbosity: "high" })
+      yield* hooks.trigger("session", "context", overridden)
+      expect(overridden.options.textVerbosity).toBe("high")
+    }),
+  ),
 )
