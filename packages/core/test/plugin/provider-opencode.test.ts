@@ -1593,7 +1593,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses a public key and disables paid models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0", OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Provider.Service
         const models = yield* Model.Service
@@ -1611,7 +1611,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0", OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Provider.Service
         const models = yield* Model.Service
@@ -1631,7 +1631,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0", OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Provider.Service
         const models = yield* Model.Service

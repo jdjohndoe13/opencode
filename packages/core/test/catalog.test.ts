@@ -15,6 +15,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { withEnv } from "./fixture/env"
 import { location } from "./fixture/location"
+import { withEnv } from "./fixture/env"
 import { testEffect } from "./lib/effect"
 
 function required<T>(value: T | undefined): T {
@@ -560,27 +561,29 @@ describe("Provider and Model", () => {
   )
 
   it.effect("defaults to big-pickle when only free OpenCode models are available", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const models = yield* Model.Service
-      yield* providers.transform((editor) => {
-        editor.update(Provider.ID.opencode, () => {})
-        ;["muse-spark-1.3-contributor-free", "new-free", "deepseek-v4.1-flash-free", "big-pickle"].forEach(
-          (id, index) =>
-            editor.models.update(Provider.ID.opencode, Model.ID.make(id), (model) => {
-              model.time.released = 4000 - index * 1000
-            }),
-        )
-      })
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: "0" }, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.opencode, () => {})
+          ;["muse-spark-1.3-contributor-free", "new-free", "deepseek-v4.1-flash-free", "big-pickle"].forEach(
+            (id, index) =>
+              editor.models.update(Provider.ID.opencode, Model.ID.make(id), (model) => {
+                model.time.released = 4000 - index * 1000
+              }),
+          )
+        })
 
-      expect((yield* models.available()).map((model) => model.id)).toEqual([
-        Model.ID.make("big-pickle"),
-        Model.ID.make("deepseek-v4.1-flash-free"),
-        Model.ID.make("muse-spark-1.3-contributor-free"),
-        Model.ID.make("new-free"),
-      ])
-      expect((yield* models.default())?.id).toBe(Model.ID.make("big-pickle"))
-    }),
+        expect((yield* models.available()).map((model) => model.id)).toEqual([
+          Model.ID.make("big-pickle"),
+          Model.ID.make("deepseek-v4.1-flash-free"),
+          Model.ID.make("muse-spark-1.3-contributor-free"),
+          Model.ID.make("new-free"),
+        ])
+        expect((yield* models.default())?.id).toBe(Model.ID.make("big-pickle"))
+      }),
+    ),
   )
 
   it.effect("keeps the newest default when a paid model is available", () =>

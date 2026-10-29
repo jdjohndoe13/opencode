@@ -5,7 +5,9 @@ import { SystemOne } from "../protocols/system-one.js"
 import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("opencode")
-const baseURL = "https://opencode.ai/inference/systemone/v1"
+// Local safety patch: the OpenCode-hosted inference endpoint is replaced with a dead
+// loopback address so a fallback to this provider can never send data to an external LLM.
+const baseURL = "http://127.0.0.1:1"
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
