@@ -2,6 +2,7 @@ export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { DeathLog } from "@opencode/client/effect/deathlog"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
@@ -75,7 +76,10 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
-      if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
+      if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) {
+        DeathLog.log("service startup: incumbent answers, exiting", { mode: options.mode })
+        return
+      }
       // Desktop can launch the service directly without injecting its saved environment.
       Object.assign(process.env, ServiceConfig.processEnv(config.env))
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.

@@ -18,6 +18,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+import { DeathLog } from "@opencode/client/effect/deathlog"
 
 // Keep requests to the local service off any proxy. Bun reads lowercase `no_proxy` alone whenever it is set, so both
 // spellings get the same merged list.
@@ -33,6 +34,7 @@ process.env.NO_PROXY = noProxy
 process.env.no_proxy = noProxy
 
 ensurePluginRuntime()
+DeathLog.install(OPENCODE_VERSION)
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
@@ -174,6 +176,7 @@ Effect.gen(function* () {
       defaultTeardown(exit, (code) => {
         // Commands report failures through process.exitCode.
         const status = code === 0 ? (process.exitCode ?? 0) : code === 130 && terminated ? 143 : code
+        DeathLog.log("teardown exiting", { exitCode: status })
         // process.exit drops output still queued for a pipe; ending the streams waits for it.
         void Promise.all(
           [process.stdout, process.stderr].map((stream) => new Promise<void>((resolve) => stream.end(() => resolve()))),
