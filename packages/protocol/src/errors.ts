@@ -62,6 +62,15 @@ export class SessionBusyError extends Schema.TaggedError<SessionBusyError>()(
   { httpApiStatus: 409 },
 ) {}
 
+export class SessionArchivedError extends Schema.TaggedError<SessionArchivedError>()(
+  "SessionArchivedError",
+  {
+    sessionID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
 export class ServiceUnavailableError extends Schema.TaggedError<ServiceUnavailableError>()(
   "ServiceUnavailableError",
   {

@@ -399,7 +399,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError, SkillLoadError],
+        error: [ConflictError, InvalidRequestError, SessionArchivedError, SessionNotFoundError, SkillLoadError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -443,7 +443,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SkillNotFoundError, SkillLoadError],
+        error: [SessionNotFoundError, SkillNotFoundError, SkillLoadError, SessionArchivedError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -479,7 +479,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: Schema.Struct({ data: SessionInbox.Synthetic }),
-        error: [ConflictError, SessionNotFoundError],
+        error: [ConflictError, SessionArchivedError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.synthetic",
@@ -497,7 +497,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           command: Schema.String,
         }),
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, SessionArchivedError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -517,7 +517,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.Compaction }),
-        error: [ConflictError, SessionNotFoundError],
+        error: [ConflictError, SessionArchivedError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.compact",
@@ -546,7 +546,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ messageID: SessionMessage.ID, files: Schema.Boolean.pipe(Schema.optional) }),
         success: Schema.Struct({ data: Session.Revert }),
-        error: [MessageNotFoundError, SessionNotFoundError, SessionBusyError, UnknownError],
+        error: [MessageNotFoundError, SessionNotFoundError, SessionBusyError, SessionArchivedError, UnknownError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -561,7 +561,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.delete("session.revert.clear", "/api/session/:sessionID/revert", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SessionBusyError, UnknownError],
+        error: [SessionNotFoundError, SessionBusyError, SessionArchivedError, UnknownError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(OpenApi.annotations({ identifier: "session.revert.clear", summary: "Clear staged revert" })),
@@ -777,7 +777,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.background", "/api/session/:sessionID/background", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, SessionArchivedError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.background",
