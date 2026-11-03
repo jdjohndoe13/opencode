@@ -2058,6 +2058,25 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
   const limitNotice = useLimitNotice(() => props.message)
+  const clipboard = useClipboard()
+  const toast = useToast()
+  const renderer = useRenderer()
+  const [copyHover, setCopyHover] = createSignal(false)
+  const copyMessage = () => {
+    const text = props.message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim()
+    if (!text) {
+      toast.show({ message: "No text content found in this message", variant: "error" })
+      return
+    }
+    clipboard
+      .write(text)
+      .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+      .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+  }
   return (
     <>
       <Show when={props.message.error && !interrupted() && !props.message.retry}>
@@ -2075,11 +2094,27 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         </Switch>
       </Show>
       <AssistantRetry retry={props.message.retry} />
-      <box paddingLeft={3} marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}>
+      <box
+        paddingLeft={3}
+        flexDirection="row"
+        marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}
+      >
         <text>
-          <span style={{ fg: theme.text.muted }}>
-            [{Locale.stamp(props.message.time.completed ?? props.message.time.created)}] ·{" "}
-          </span>
+          <span style={{ fg: theme.text.muted }}>[{Locale.stamp(props.message.time.completed ?? props.message.time.created)}]</span>
+        </text>
+        <text
+          onMouseOver={() => setCopyHover(true)}
+          onMouseOut={() => setCopyHover(false)}
+          onMouseUp={(event: { stopPropagation(): void }) => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            event.stopPropagation()
+            copyMessage()
+          }}
+        >
+          <span style={{ fg: copyHover() ? theme.text.base : theme.text.muted }}> ⧉ </span>
+        </text>
+        <text>
+          <span style={{ fg: theme.text.muted }}>·{" "}</span>
           <span style={{ fg: props.message.error ? theme.text.muted : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
