@@ -72,6 +72,29 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("the sweep skips an archived Session's claim so the service can never resume it", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const archived = Session.ID.make("ses_recover_archived")
+      const claim = { time_suspended: Date.now(), time_archived: Date.now() }
+      yield* seedSessions(database, [archived], claim)
+      // The archived claim survives the sweep untouched: no resume, no terminal release.
+      expect(yield* store.listSuspended()).toEqual([])
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      expect(drained).toEqual([])
+      expect((yield* claims(database))[archived]).toBe(true)
+    }),
+  )
+
   it.effect("claims at execution start, releases on completion, and preserves through teardown", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -1322,7 +1345,9 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<
+    Pick<typeof SessionTable.$inferInsert, "time_suspended" | "time_archived" | "resume_attempts" | "parent_id">
+  > = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db

@@ -158,7 +158,9 @@ export const layer = (options?: Options) =>
             resume: false,
           })
           .pipe(
+            // An archived owner is read-only: drop the notice and acknowledge the marker anyway.
             Effect.catchTag("Session.NotFoundError", () => Effect.void),
+            Effect.catchTag("Session.ArchivedError", () => Effect.void),
             Effect.orDie,
           )
         yield* jobs.completeBackground(background.notificationID)
