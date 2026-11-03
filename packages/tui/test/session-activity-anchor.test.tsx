@@ -178,13 +178,14 @@ test.each([0, 1, 3])(
       const expand = await toggle(setup, label)
       expect(expand.frames).toEqual([expand.row])
       const expanded = lines(setup.captureCharFrame())
-      expect(expanded[expand.row]).toContain(`− ${label}`)
+      // The summary row carries the run's start stamp between the icon and the label.
+      expect(expanded[expand.row]).toMatch(new RegExp(`− \\[[\\d-]+ [\\d:]+\\] ${label}`))
       expect(expanded.slice(expand.row + 1).join("\n")).toContain(`echo turn ${turn} step 0`)
       expect(expanded.slice(0, expand.row).join("\n")).not.toContain(`echo turn ${turn} step`)
 
       const collapse = await toggle(setup, label)
       expect(collapse.frames).toEqual([expand.row])
-      expect(lines(setup.captureCharFrame())[expand.row]).toContain(`+ ${label}`)
+      expect(lines(setup.captureCharFrame())[expand.row]).toMatch(new RegExp(`\\+ \\[[\\d-]+ [\\d:]+\\] ${label}`))
     })
   },
   20000,
@@ -196,14 +197,14 @@ test("a low activity summary that ends the transcript opens like v2 at the botto
       const label = "1 command"
       const expand = await toggle(setup, label)
       const expanded = lines(setup.captureCharFrame())
-      const row = expanded.findIndex((line) => line.includes(`− ${label}`))
+      const row = expanded.findIndex((line) => line.includes(`− `) && line.includes(label))
       expect(row).toBeLessThan(expand.row)
       expect(expanded.slice(row + 1).join("\n")).toContain("running step 0 output")
       expect(expanded.join("\n")).not.toContain("Jump to latest")
 
       const collapse = await toggle(setup, label)
       expect(collapse.frames.at(-1)).toBe(expand.row)
-      expect(lines(setup.captureCharFrame())[expand.row]).toContain(`+ ${label}`)
+      expect(lines(setup.captureCharFrame())[expand.row]).toMatch(new RegExp(`\\+ \\[[\\d-]+ [\\d:]+\\] ${label}`))
     },
     [...messages, ...running],
   )
@@ -220,7 +221,10 @@ test("collapsing details that no longer overflow hides Jump to latest", async ()
     expect(setup.captureCharFrame()).not.toContain("Jump to latest")
 
     await click()
-    await setup.waitForFrame((frame) => frame.includes(`− ${label}`) && frame.includes("echo tall step 0"))
+    // The summary row carries the run's start stamp between the icon and the label.
+    await setup.waitForFrame(
+      (frame) => new RegExp(`− \\[[\\d-]+ [\\d:]+\\] ${label}`).test(frame) && frame.includes("echo tall step 0"),
+    )
     await Array.from({ length: 10 }).reduce<Promise<void>>(
       (previous) => previous.then(() => setup.mockMouse.scroll(30, 10, "up")),
       Promise.resolve(),
@@ -228,7 +232,9 @@ test("collapsing details that no longer overflow hides Jump to latest", async ()
     await setup.waitForFrame((frame) => frame.includes("Tall prompt") && frame.includes("Jump to latest"))
 
     await click()
-    await setup.waitForFrame((frame) => frame.includes(`+ ${label}`) && frame.includes("Tall answer"))
+    await setup.waitForFrame(
+      (frame) => new RegExp(`\\+ \\[[\\d-]+ [\\d:]+\\] ${label}`).test(frame) && frame.includes("Tall answer"),
+    )
     await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))
   }, tall)
 }, 20000)

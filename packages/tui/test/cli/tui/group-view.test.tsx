@@ -186,17 +186,18 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
   })
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Instructions: 2 files"))
+    await app.waitForFrame((frame) => frame.includes("Instructions:"))
     expect(app.captureCharFrame()).not.toContain("Loaded AGENTS.md")
     await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
     await app.renderOnce()
-    expect(
-      app
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.trim())
-        .join("\n"),
-    ).toContain("◈ Instructions: 2 files\nLoaded AGENTS.md\nLoaded packages/tui/AGENTS.md")
+    const summary = app
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trim())
+      .join("\n")
+    // The summary row now carries the load's start stamp between the icon and
+    // the label, and wraps at the fixture's 40-column width.
+    expect(summary).toMatch(/◈ \[[\d-]+ [\d:]+\] Instructions:\n2 files\nLoaded AGENTS\.md\nLoaded packages\/tui\/AGENTS\.md/)
   } finally {
     app.renderer.destroy()
   }
@@ -241,7 +242,7 @@ test("a low activity group with nothing finished stays collapsed behind a status
   })
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Running command…"))
+    await app.waitForFrame((frame) => frame.includes("Running"))
     expect(app.captureCharFrame()).not.toContain("Shell one")
     expect(app.captureCharFrame()).not.toContain("Shell two")
   } finally {
@@ -289,11 +290,11 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("1 command"))
-    expect(app.captureCharFrame()).toContain("+ 1 command")
+    expect(app.captureCharFrame()).toMatch(/\+ \[[\d-]+ [\d:]+\] 1 command/)
     expect(app.captureCharFrame()).not.toContain("command failed")
     await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("− 1 command")
+    expect(app.captureCharFrame()).toMatch(/− \[[\d-]+ [\d:]+\] 1 command/)
     expect(app.captureCharFrame()).toContain("command failed")
   } finally {
     app.renderer.destroy()
