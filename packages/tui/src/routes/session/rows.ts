@@ -218,10 +218,15 @@ export function createSessionRows(
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
-        // The reply stamp opens the first assistant step of a turn; the step
-        // event usually precedes parts, but a resumed session can stream parts
-        // without a step event, so the first part guarantees the header lands.
-        if (firstAssistantOfTurn(data.session.message.list(sessionID()), ref.messageID)) {
+        // The stamp opens the step at its first visible part. The turn's first
+        // step always stamps (the step event usually precedes parts, but a
+        // resumed session can stream parts without one, so the first part
+        // guarantees the header lands); mid-turn steps stamp only when they
+        // open with text, the one part kind without its own stamp.
+        if (
+          !hasPartOfMessage(draft, ref.messageID) &&
+          (part.type === "text" || firstAssistantOfTurn(data.session.message.list(sessionID()), ref.messageID))
+        ) {
           if (!draft.some((row) => row.type === "assistant-header" && row.messageID === ref.messageID)) {
             const index = queuedStart(draft)
             completePrevious(draft, index)
@@ -435,9 +440,14 @@ export function reduceSessionRows(
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      // The stamp opens the reply, so it lands with the first visible part and
-      // never orphans above a step that rendered nothing.
-      if (first && header) rows.push({ entry: { type: "assistant-header", messageID: message.id } })
+      // The stamp opens the step at its first visible part, so it never
+      // orphans above a step that rendered nothing. The turn's first step
+      // always stamps; mid-turn steps stamp only when they open with text,
+      // the one part kind without its own stamp. Tools and thoughts carry
+      // their own stamps (or a stamped summary), and a header above a
+      // grouped part would split a contiguous group.
+      if (first && (part.type === "text" || header))
+        rows.push({ entry: { type: "assistant-header", messageID: message.id } })
       first = false
       rows.push({
         entry: { type: "part", ref: { messageID: message.id, partID } },
@@ -523,6 +533,15 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   if (!match) return
   const ordinal = Number(match[2])
   return message.content.filter((part) => part.type === match[1])[ordinal]
+}
+
+/** A message already has a rendered row, so its first-part stamp already landed. */
+function hasPartOfMessage(rows: SessionRow[], messageID: string) {
+  return rows.some((row) => {
+    if (row.type === "part") return row.ref.messageID === messageID
+    if (row.type !== "group") return false
+    return groupRefs(row, true).some((ref) => ref.messageID === messageID)
+  })
 }
 
 /**

@@ -108,6 +108,14 @@ function GroupContent(props: GroupProps) {
     }, 0),
   )
   const grouped = () => (props.node.kind === "reasoning" ? ctx.thinkingMode() === "hide" : ctx.groupExploration())
+  // The summary row hides the individual parts, each with its own stamp, so the
+  // row carries the first item's start time instead.
+  const stamp = createMemo(() => {
+    if (props.node.kind === "reasoning") return thoughts()[0]?.part.time?.created
+    const first = tools()[0]
+    return first && (first.time.ran ?? first.time.created)
+  })
+  const stampText = createMemo(() => (stamp() === undefined ? "" : `[${Locale.stamp(stamp()!)}] `))
   const completed = () =>
     props.node.kind === "reasoning"
       ? props.completed
@@ -124,7 +132,7 @@ function GroupContent(props: GroupProps) {
       ([name, count]) =>
         `${count} ${count === 1 ? name : name === "search" || name === "fetch" ? `${name}es` : `${name}s`}`,
     )
-    return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
+    return `${stampText()}${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
   const toggle = () => disclosure.toggle()
   const children = (mode: "normal" | "thought" | "tool") => (
@@ -176,12 +184,13 @@ function GroupContent(props: GroupProps) {
                       )
               }
               complete={props.completed}
-              pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
+              pending={`${stampText()}${latest() ? `Thinking: ${latest()}` : "Thinking"}`}
               spinner={!props.completed}
               onMouseOver={() => setHover(true)}
               onMouseOut={() => setHover(false)}
               onMouseUp={toggle}
             >
+              {stampText()}
               {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
               <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
               <Show when={props.completed && thoughts().length > 1}> · {thoughts().length} steps</Show>
@@ -204,7 +213,9 @@ function ActivityGroup(props: GroupProps) {
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
   const entries = createMemo(() => descendants(props.node))
+  const stamp = createMemo(() => firstStamp(entries(), props.message))
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
+  const label = createMemo(() => (stamp() === undefined ? "" : `[${Locale.stamp(stamp()!)}] `) + summary().label)
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
@@ -212,13 +223,13 @@ function ActivityGroup(props: GroupProps) {
           icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}
-          pending={summary().label}
+          pending={label()}
           spinner={!disclosure.expanded() && summary().active}
           onMouseOver={() => setHover(true)}
           onMouseOut={() => setHover(false)}
           onMouseUp={(event) => disclosure.toggle(event.currentTarget)}
         >
-          {summary().label}
+          {label()}
         </InlineToolRow>
         <Show when={disclosure.expanded()}>
           <box flexDirection="column" gap={1} marginTop={1}>
@@ -236,10 +247,12 @@ function InstructionsGroup(props: GroupProps) {
   const theme = useTheme()
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
+  const entries = createMemo(() => descendants(props.node))
+  const stamp = createMemo(() => firstStamp(entries(), props.message))
   const files = createMemo(
     () =>
       new Set(
-        descendants(props.node).flatMap((entry) =>
+        entries().flatMap((entry) =>
           entry.type === "message" ? instructionPaths(props.message(entry.messageID)) : [],
         ),
       ).size,
@@ -255,6 +268,7 @@ function InstructionsGroup(props: GroupProps) {
         onMouseOut={() => setHover(false)}
         onMouseUp={() => disclosure.toggle()}
       >
+        <Show when={stamp() !== undefined}>[{Locale.stamp(stamp()!)}] </Show>
         Instructions: {files()} {files() === 1 ? "file" : "files"}
       </InlineToolRow>
       <Show when={disclosure.expanded()}>
@@ -287,6 +301,26 @@ function descendants(node: Extract<SessionNode, { type: "group" }>) {
   const result: SessionEntry[] = []
   visitEntries(node.children, (entry) => result.push(entry))
   return result
+}
+
+/**
+ * Start time of a group's first visible item, so a summary row carries the
+ * stamp the hidden individual rows would have shown.
+ */
+function firstStamp(entries: readonly SessionEntry[], message: Renderers["message"]): number | undefined {
+  for (const entry of entries) {
+    if (entry.type === "message") {
+      const created = message(entry.messageID)?.time.created
+      if (created !== undefined) return created
+      continue
+    }
+    if (entry.type !== "part") continue
+    const item = message(entry.ref.messageID)
+    if (item?.type !== "assistant") continue
+    const part = resolvePart(item, entry.ref.partID)
+    if (part?.type === "tool") return part.time.ran ?? part.time.created
+    if (part?.type === "reasoning" && part.time) return part.time.created
+  }
 }
 
 /** Permission-blocked tools stay visible below the root group, even when collapsed. */

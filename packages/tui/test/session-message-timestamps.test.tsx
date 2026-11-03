@@ -22,6 +22,7 @@ test("session transcript stamps user messages, reply tops, and tool calls", asyn
   const doneAt = new Date(2026, 9, 23, 14, 31, 12).getTime()
   const toolAt = new Date(2026, 9, 23, 14, 30, 40).getTime()
   const runningAt = new Date(2026, 9, 23, 14, 30, 50).getTime()
+  const readAt = new Date(2026, 9, 23, 14, 30, 35).getTime()
   const session = {
     id: "ses_test",
     title: "Timestamps",
@@ -44,6 +45,18 @@ test("session transcript stamps user messages, reply tops, and tool calls", asyn
       agent: "build",
       model: { providerID: "demo", id: "demo-model" },
       content: [
+        {
+          type: "tool",
+          id: "call-read",
+          name: "read",
+          time: { created: readAt, ran: readAt, completed: readAt + 1_000 },
+          state: {
+            status: "completed",
+            input: { filePath: "a.ts" },
+            content: [{ type: "text", text: "contents" }],
+            metadata: {},
+          },
+        },
         {
           type: "tool",
           id: "call-shell",
@@ -101,6 +114,7 @@ test("session transcript stamps user messages, reply tops, and tool calls", asyn
     const toolStamp = `[${Locale.stamp(toolAt)}]`
     const runningStamp = `[${Locale.stamp(runningAt)}]`
     const footerStamp = `[${Locale.stamp(doneAt)}]`
+    const readStamp = `[${Locale.stamp(readAt)}]`
     await waitForHighlightedFrame(
       setup,
       (frame) =>
@@ -112,6 +126,9 @@ test("session transcript stamps user messages, reply tops, and tool calls", asyn
         frame.includes(runningStamp) &&
         frame.includes("running for") &&
         frame.includes(footerStamp) &&
+        // A collapsed exploration summary carries the first tool's start stamp,
+        // the stamp the hidden individual tool rows would have shown.
+        frame.includes(`→ ${readStamp} Explored: 1 read`) &&
         frame.includes("Assistant reply"),
     )
     const frame = setup.captureCharFrame()
