@@ -512,7 +512,10 @@ const layer = Layer.effect(
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
       background: Effect.fn("Session.background")(function* (sessionID) {
-        yield* result.get(sessionID)
+        const session = yield* result.get(sessionID)
+        // Fail closed before backgrounding any job: an archived Session is read-only, and the
+        // synthetic notice below would reject the write anyway, leaving jobs backgrounded with no notice.
+        if (session.time.archived !== undefined) return yield* new ArchivedError({ sessionID })
         const backgrounded = yield* jobs.backgroundAll({ sessionID })
         if (backgrounded.length === 0) return
         yield* result
