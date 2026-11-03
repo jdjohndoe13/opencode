@@ -378,6 +378,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     theme,
     mono: () => props.mono,
     imagePreview: props.tuiConfig.prompt?.image_preview,
+    pastedPaths: props.tuiConfig.prompt?.pasted_paths,
     clipboard: props.clipboard,
     history: props.history,
     queuedPrompts: queue,

@@ -287,6 +287,15 @@ export const settings: Setting[] = [
     keywords: ["paste summary", "clipboard", "pasted content"],
   },
   {
+    title: "Pasted file paths",
+    category: "Input",
+    path: ["prompt", "pasted_paths"],
+    description: "Whether pasted image or PDF paths attach the file or insert the literal path",
+    default: "attach",
+    values: ["attach", "literal"],
+    keywords: ["attachments", "file path", "pdf", "image", "paste", "literal path"],
+  },
+  {
     title: "Image previews",
     category: "Input",
     path: ["prompt", "image_preview"],

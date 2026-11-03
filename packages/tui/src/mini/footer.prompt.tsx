@@ -125,6 +125,7 @@ type PromptInput = {
   theme: Accessor<RunFooterTheme>
   mono: Accessor<boolean>
   imagePreview?: boolean
+  pastedPaths?: "attach" | "literal"
   clipboard?: Pick<ClipboardService, "read">
   history?: Accessor<RunPrompt[]>
   queuedPrompts: Accessor<FooterQueuedPrompt[]>
@@ -876,7 +877,7 @@ export function createPromptState(input: PromptInput): PromptState {
         const normalized = image ? content.data : stripAnsiSequences(content.data).replace(/\r\n?/g, "\n")
         const files = image
           ? [{ type: "file" as const, uri: `data:${content.mime};base64,${content.data}`, filename: "clipboard" }]
-          : shell()
+          : shell() || input.pastedPaths === "literal"
             ? undefined
             : await resolvePastedAttachments(normalized, process.platform)
         if (changed()) return
