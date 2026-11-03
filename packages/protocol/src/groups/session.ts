@@ -24,6 +24,7 @@ import {
   InvalidRequestError,
   MessageNotFoundError,
   ServiceUnavailableError,
+  SessionArchivedError,
   SessionBusyError,
   SessionNotFoundError,
   SkillNotFoundError,
