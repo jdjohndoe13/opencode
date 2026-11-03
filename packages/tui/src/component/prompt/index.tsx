@@ -1658,6 +1658,20 @@ export function Prompt(props: PromptProps) {
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
   })
+  // The directory stays visible while the session runs so several terminals can be
+  // told apart by their folder; `footerLocation` only resolves it when idle, so read
+  // the session location directly for the running footer.
+  const sessionLocation = createMemo(() => {
+    if (props.sessionID) return data.session.get(props.sessionID)?.location
+    return currentLocation.ref ?? data.location.default()
+  })
+  const runningLocationLabel = createMemo(() => {
+    const location = sessionLocation()
+    if (!location) return
+    const directory = abbreviateHome(location.directory, paths.home)
+    const branch = data.location.vcs.info(location)?.branch.current
+    return branch ? `${directory}:${branch}` : directory
+  })
   const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
   const locationLabelDisplay = createMemo(() => {
     const label = locationLabel()
@@ -1665,7 +1679,7 @@ export function Prompt(props: PromptProps) {
     return truncateFilePath(label, locationWidth())
   })
   const locationActions = useWorkingDirectoryActions({
-    directory: () => footerLocation()?.directory,
+    directory: () => footerLocation()?.directory ?? sessionLocation()?.directory,
     onMove: () => void move.open(),
   })
 
@@ -1940,6 +1954,22 @@ export function Prompt(props: PromptProps) {
                         warning={theme.text.feedback.warning.base}
                         flash={theme.decrease(theme.text.feedback.warning.base, 2)}
                       />
+                      <Show when={runningLocationLabel()}>
+                        {(location) => (
+                          <text
+                            id="prompt.footer.location.running"
+                            fg={locationActions.hovered() ? theme.text.base : theme.text.muted}
+                            wrapMode="none"
+                            truncate
+                            flexShrink={1}
+                            onMouseOver={locationActions.onMouseOver}
+                            onMouseOut={locationActions.onMouseOut}
+                            onMouseUp={locationActions.onMouseUp}
+                          >
+                            {location()}
+                          </text>
+                        )}
+                      </Show>
                     </box>
                   </Match>
                   <Match when={move.progress()}>
