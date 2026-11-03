@@ -176,6 +176,9 @@ export const layer = (options?: Options) =>
             // The owner may be deleted after the pending row was read; the notice is owed
             // to nobody, so acknowledge the row instead of failing the whole sweep.
             Effect.catchTag("Session.NotFoundError", () => Effect.succeed(true)),
+            // An archived owner is read-only: drop the notice and acknowledge the marker
+            // anyway, so the sweep never spins on a session that cannot receive it.
+            Effect.catchTag("Session.ArchivedError", () => Effect.succeed(true)),
             // Retain the owner's row: the conflict proves another item already owns the ID,
             // so deleting it would lose the notice without admitting anything.
             Effect.catchTag("Session.SyntheticConflictError", (error) =>

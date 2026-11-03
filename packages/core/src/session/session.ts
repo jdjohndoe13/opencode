@@ -12,6 +12,7 @@ import { Instance } from "../instance/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
 import {
+  ArchivedError,
   BusyError,
   CompactionConflictError,
   InboxConflictError,
@@ -54,6 +55,12 @@ export const make = Effect.fn("Session.make")(function* () {
     if (!session) return yield* new NotFoundError({ sessionID })
     return session
   })
+  // Archived Sessions are read-only. Metadata writes (rename, setMetadata, setPermissions,
+  // switchAgent, switchModel) and archive/unarchive/fork/interrupt/read paths stay allowed so
+  // recovery tooling can still manage zombies; only new-message admission is gated here.
+  // The restart sweep adds its own gate in SessionStore.listSuspended.
+  const assertWritable = (session: SessionSchema.Info) =>
+    session.time.archived === undefined ? Effect.void : Effect.fail(new ArchivedError({ sessionID: session.id }))
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
     const stored = yield* store.message(messageID)
     return stored?.sessionID === sessionID ? stored.message : undefined
@@ -156,6 +163,7 @@ export const make = Effect.fn("Session.make")(function* () {
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const session = yield* get(sessionID)
+        yield* assertWritable(session)
         const messageID = input.id ?? SessionMessage.ID.create()
         const admitted = yield* Effect.gen(function* () {
           const existing = yield* admission.reconcile({
@@ -194,6 +202,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { id?: SessionMessage.ID; command: string },
   ) {
     const session = yield* get(sessionID)
+    yield* assertWritable(session)
     // The server owns completion recording even if the submitting client disconnects.
     const running = yield* Effect.gen(function* () {
       const started = yield* SessionShell.start({ session, command: input.command }).pipe(
@@ -238,6 +247,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { messageID?: SessionMessage.ID; skill: Skill.ID; resume?: boolean },
   ) {
     const session = yield* get(sessionID)
+    yield* assertWritable(session)
     const skill = yield* SessionSkill.get({ session, skill: input.skill }).pipe(
       Effect.provideService(Instance.Service, instances),
     )
@@ -261,6 +271,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
   ) {
     const session = yield* get(sessionID)
+    yield* assertWritable(session)
     if (session.revert) yield* SessionRevert.commit(bus, session)
     const inputID = input.id ?? SessionMessage.ID.create()
     const admitted = yield* admission
@@ -297,7 +308,8 @@ export const make = Effect.fn("Session.make")(function* () {
     ) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* get(sessionID)
+          const session = yield* get(sessionID)
+          yield* assertWritable(session)
           const inputID = input.id ?? SessionMessage.ID.create()
           const admittedInput = {
             type: "synthetic",
@@ -334,6 +346,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { messageID: SessionMessage.ID; files?: boolean },
   ) {
     const session = yield* get(sessionID)
+    yield* assertWritable(session)
     if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
       Effect.provideService(Instance.Service, instances),
@@ -343,6 +356,7 @@ export const make = Effect.fn("Session.make")(function* () {
   })
   const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
+    yield* assertWritable(session)
     if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     yield* SessionRevert.clear(session).pipe(
       Effect.provideService(Instance.Service, instances),
