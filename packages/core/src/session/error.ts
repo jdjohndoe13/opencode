@@ -89,6 +89,15 @@ export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyErro
   sessionID: SessionSchema.ID,
 }) {}
 
+/** The Session is archived and therefore read-only: history stays readable, no new messages are admitted. */
+export class ArchivedError extends Schema.TaggedError<ArchivedError>()("Session.ArchivedError", {
+  sessionID: SessionSchema.ID,
+}) {
+  override get message() {
+    return "Session is archived. Fork it to continue."
+  }
+}
+
 export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,

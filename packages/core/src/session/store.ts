@@ -205,10 +205,17 @@ const layer = Layer.effect(
         return message && { sessionID: row.session_id, message }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
+        // Archived Sessions are read-only: the restart sweep must never resume them.
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(
+            and(
+              isNotNull(SessionTable.time_suspended),
+              isNull(SessionTable.parent_id),
+              isNull(SessionTable.time_archived),
+            ),
+          )
           .all()
           .pipe(
             Effect.orDie,

@@ -28,6 +28,7 @@ import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
 import {
+  ArchivedError,
   AttachmentError,
   BusyError,
   CompactionConflictError,
@@ -103,6 +104,7 @@ type ForkInput = {
 }
 
 export {
+  ArchivedError,
   AttachmentError,
   BusyError,
   CompactionConflictError,
@@ -235,10 +237,10 @@ export interface Interface {
   ) => ReturnType<Session.Handle["skill"]>
   readonly compact: (
     input: CompactInput,
-  ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
+  ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError | ArchivedError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
-  readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | ArchivedError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
   readonly synthetic: (
@@ -251,11 +253,14 @@ export interface Interface {
       files?: boolean
     }) => Effect.Effect<
       SessionSchema.Revert,
-      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+      NotFoundError | MessageNotFoundError | BusyError | ArchivedError | Snapshot.Error | FileSystem.DirectoryNotFoundError
     >
     readonly clear: (
       sessionID: SessionSchema.ID,
-    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError>
+    ) => Effect.Effect<
+      void,
+      NotFoundError | BusyError | ArchivedError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+    >
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
 }
