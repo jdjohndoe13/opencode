@@ -73,7 +73,7 @@ test("clicking a backfilled thought group toggles it", async () => {
     await setup.waitForFrame((frame) => frame.includes("Turn 00 prompt"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     const lines = setup.captureCharFrame().split("\n")
-    const row = lines.findIndex((line) => line.includes("+ Thought: Turn 0"))
+    const row = lines.findIndex((line) => line.includes("Thought: Turn 0"))
     expect(row).toBeGreaterThan(0)
     await setup.mockMouse.click(6, row)
     await setup.waitForVisualIdle({ quietFrames: 3 })
