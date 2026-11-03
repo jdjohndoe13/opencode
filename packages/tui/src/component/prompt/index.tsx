@@ -50,7 +50,8 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { useConfig, useCursorStyle } from "../../config"
 import { usePromptMove } from "./move"
-import { promptFilesForServer, resolvePastedAttachments } from "./local-attachment"
+import { existsSync } from "node:fs"
+import { normalizePastedFilepath, promptFilesForServer, resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useArgs } from "../../context/args"
@@ -1447,7 +1448,10 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
     const pastedContent = normalizedText.trim()
-    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
+    const literalPaths = config.prompt?.pasted_paths === "literal"
+    const attachments = literalPaths
+      ? undefined
+      : await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
     if (changed()) return
     if (attachments) {
       attachments.forEach((attachment) => {
@@ -1457,6 +1461,16 @@ export function Prompt(props: PromptProps) {
         }
         pasteAttachment(attachment)
       })
+      return
+    }
+
+    // A single pasted path stays verbatim so long paths are not collapsed into a paste summary.
+    if (
+      literalPaths &&
+      !pastedContent.includes("\n") &&
+      existsSync(normalizePastedFilepath(pastedContent, terminalEnvironment.platform))
+    ) {
+      input.insertText(normalizedText)
       return
     }
 

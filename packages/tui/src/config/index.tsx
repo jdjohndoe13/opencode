@@ -144,6 +144,10 @@ export const Info = Schema.Struct({
       paste: Schema.optional(Schema.Literals(["compact", "full"])).annotate({
         description: "Display large pastes as compact placeholders or full text",
       }),
+      pasted_paths: Schema.optional(Schema.Literals(["attach", "literal"])).annotate({
+        description:
+          "Pasted paths to images or PDFs are attached as inline files ('attach') or inserted as literal text ('literal')",
+      }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show image attachment previews above the prompt input",
       }),
