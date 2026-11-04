@@ -56,6 +56,15 @@ const shown = (frame: string, text: string) =>
     .split("\n")
     .some((line) => line.slice(0, 90).replace("┃", "").trim() === text)
 
+// The sidebar header row of a block ("Bookmarks" or "My messages"), identified
+// by its title plus the search glyph. The session title is also "Bookmarks",
+// but it never carries the glass.
+const headerAt = (frame: string, title: string) => {
+  const lines = frame.split("\n")
+  const row = lines.findIndex((line) => line.includes(title) && line.includes("⌕"))
+  return row === -1 ? undefined : { line: lines[row]!, row }
+}
+
 test("bookmarks star, sidebar list, and transcript jump", async () => {
   await using state = await tmpdir()
   await mkdir(`${state.path}/test/tui`, { recursive: true })
@@ -63,7 +72,7 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
   await Bun.write(store, JSON.stringify(seed))
   await using app = await createAppFixture({
     width: 140,
-    height: 30,
+    height: 44,
     state: state.path,
     args: { sessionID: session.id },
     config: { animations: false, tabs: { mode: "off" } },
@@ -86,6 +95,10 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     const frame = app.captureCharFrame()
     expect(frame).toContain("★ Second answer nine")
     expect(frame).toContain("★ First prompt zero")
+    // The "My messages" block sits above the bookmarks and lists the user's
+    // own messages newest-first, capped by a nested scroll region.
+    expect(frame).toContain("My messages ⌕ (30)")
+    expect(headerAt(frame, "My messages")!.row).toBeLessThan(headerAt(frame, "Bookmarks")!.row)
 
     // The previous bookmark is the oldest one: the transcript scrolls up to it.
     app.mockInput.pressKey("x", { ctrl: true })
@@ -120,12 +133,10 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     await app.waitForFrame((next) => !next.includes("Second answer nine") && next.includes("First prompt zero"))
     expect((await stored()).map((entry) => entry.messageID)).toEqual([id(0, 0)])
 
-    // The sidebar header's magnifying glass opens a searchable bookmark list.
-    // The glyph is a single cell, so the click must land exactly on it.
-    const lines = app.captureCharFrame().split("\n")
-    const glassRow = lines.findIndex((line) => line.includes("⌕"))
-    expect(glassRow).toBeGreaterThanOrEqual(0)
-    await app.mockMouse.click(lines[glassRow]!.indexOf("⌕"), glassRow)
+    // The bookmarks header's magnifying glass opens a searchable bookmark
+    // list. The glyph is a single cell, so the click must land exactly on it.
+    const glass = headerAt(app.captureCharFrame(), "Bookmarks")!
+    await app.mockMouse.click(glass.line.indexOf("⌕"), glass.row)
     await app.waitForFrame((next) => next.includes("Search bookmarks"))
 
     // A query matching nothing reports it; narrowing to the first bookmark
@@ -139,23 +150,39 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
       (next) => !next.includes("Search bookmarks") && next.includes("First prompt zero") && shown(next, "Bookmark prompt 0"),
     )
 
-    // The header's triangle collapses the list to a single line that keeps
-    // the glass and the count; clicking the triangle again expands it. The
-    // layout may still settle after the dialog closes, so the glyph is
-    // re-located and re-clicked on every frame pass until it takes effect.
-    const clickTriangle = (direction: string) =>
+    // Each header's triangle collapses its own list to a single line that
+    // keeps the glass and the count; clicking it again expands. The layout
+    // may still settle after the dialog closes, so the glyph is re-located
+    // and re-clicked on every frame pass until it takes effect.
+    const clickTriangle = (title: string, direction: "collapse" | "expand") =>
       app.waitForFrame(async (next) => {
-        if (next.includes(direction === "collapse" ? "▶" : "▼")) return true
-        const row = next.split("\n").findIndex((line) => line.includes(direction === "collapse" ? "▼" : "▶"))
-        if (row >= 0) await app.mockMouse.click(next.split("\n")[row]!.indexOf(direction === "collapse" ? "▼" : "▶"), row)
+        const glyph = direction === "collapse" ? "▶" : "▼"
+        const current = headerAt(next, title)
+        if (current?.line.includes(glyph)) return true
+        const opposite = direction === "collapse" ? "▼" : "▶"
+        if (current?.line.includes(opposite))
+          await app.mockMouse.click(current.line.indexOf(opposite), current.row)
         return false
       })
-    await clickTriangle("collapse")
+    const myMessages = () => app.captureCharFrame().split("\n").filter((line) => line.includes(" › ")).length
+    // The block caps its list at 10 rows and scrolls the rest internally.
+    expect(myMessages()).toBe(10)
+
+    await clickTriangle("My messages", "collapse")
     const collapsed = app.captureCharFrame()
-    expect(collapsed).toContain("⌕")
-    expect(collapsed).toContain("(1)")
-    expect(collapsed).not.toContain("★ First prompt zero")
-    await clickTriangle("expand")
+    expect(headerAt(collapsed, "My messages")!.line).toContain("(30)")
+    expect(headerAt(collapsed, "My messages")!.line).toContain("⌕")
+    expect(myMessages()).toBe(0)
+    // The bookmarks block is untouched by the other block's collapse.
+    expect(collapsed).toContain("★ First prompt zero")
+    await clickTriangle("My messages", "expand")
+    expect(myMessages()).toBe(10)
+
+    await clickTriangle("Bookmarks", "collapse")
+    const collapsedBookmarks = app.captureCharFrame()
+    expect(headerAt(collapsedBookmarks, "Bookmarks")!.line).toContain("(1)")
+    expect(collapsedBookmarks).not.toContain("★ First prompt zero")
+    await clickTriangle("Bookmarks", "expand")
     expect(app.captureCharFrame()).toContain("★ First prompt zero")
   } finally {
     if (!app.renderer.isDestroyed) app.renderer.destroy()
