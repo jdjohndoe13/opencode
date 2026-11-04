@@ -138,6 +138,25 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     await app.waitForFrame(
       (next) => !next.includes("Search bookmarks") && next.includes("First prompt zero") && shown(next, "Bookmark prompt 0"),
     )
+
+    // The header's triangle collapses the list to a single line that keeps
+    // the glass and the count; clicking the triangle again expands it. The
+    // layout may still settle after the dialog closes, so the glyph is
+    // re-located and re-clicked on every frame pass until it takes effect.
+    const clickTriangle = (direction: string) =>
+      app.waitForFrame(async (next) => {
+        if (next.includes(direction === "collapse" ? "▶" : "▼")) return true
+        const row = next.split("\n").findIndex((line) => line.includes(direction === "collapse" ? "▼" : "▶"))
+        if (row >= 0) await app.mockMouse.click(next.split("\n")[row]!.indexOf(direction === "collapse" ? "▼" : "▶"), row)
+        return false
+      })
+    await clickTriangle("collapse")
+    const collapsed = app.captureCharFrame()
+    expect(collapsed).toContain("⌕")
+    expect(collapsed).toContain("(1)")
+    expect(collapsed).not.toContain("★ First prompt zero")
+    await clickTriangle("expand")
+    expect(app.captureCharFrame()).toContain("★ First prompt zero")
   } finally {
     if (!app.renderer.isDestroyed) app.renderer.destroy()
   }
