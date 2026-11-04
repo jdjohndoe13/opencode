@@ -18,6 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
+import { useBookmarks, sessionBookmarks } from "../../context/bookmarks"
 import { SplitBorder } from "../../ui/border"
 import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
@@ -168,6 +169,7 @@ export function Session(props: {
   const sessionID = route.sessionID
   const { navigate } = useRoute()
   const data = useData()
+  const bookmarks = useBookmarks()
   const local = useLocal()
   const args = useArgs()
   const configState = useConfig()
@@ -893,6 +895,48 @@ export function Session(props: {
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
+  // A sidebar bookmark row click lands here once the route is on that session.
+  createEffect(() => {
+    const pending = bookmarks.pending()
+    if (!pending || pending.sessionID !== route.sessionID) return
+    bookmarks.clearRequested()
+    jumpToMessage(pending.messageID)
+  })
+  // Bookmarks whose message no longer exists (session deleted, reverted)
+  // are dropped when the session's messages are known.
+  createEffect(() => {
+    const list = messages()
+    if (!list.length) return
+    bookmarks.prune((sessionID, messageID) =>
+      sessionID === route.sessionID ? list.some((message) => message.id === messageID) : true,
+    )
+  })
+
+  // The message closest to the top of the viewport, used by the keyboard
+  // bookmark toggle. Anchors only exist for mounted rows, so the reader's
+  // own window decides the target.
+  const messageAtTop = () => {
+    const positions = anchors.messagePositions()
+    if (!positions.length) return undefined
+    const top = scroll.scrollTop
+    const at = positions.map((item) => ({ id: item.id, top: top + item.y - scroll.viewport.y }))
+    return (at.findLast((item) => item.top <= top + 1) ?? at[0]).id
+  }
+
+  const cycleBookmark = (direction: "next" | "prev") =>
+    ensureAllRows(() => {
+      const saved = new Set(sessionBookmarks(bookmarks.entries(), route.sessionID).map((item) => item.messageID))
+      const positions = anchors.messagePositions().filter((item) => saved.has(item.id))
+      if (!positions.length) return
+      const top = scroll.scrollTop
+      const at = positions.map((item) => ({ id: item.id, top: top + item.y - scroll.viewport.y }))
+      const next =
+        direction === "next"
+          ? (at.find((item) => item.top > top + 1) ?? at[0])
+          : (at.findLast((item) => item.top < top - 1) ?? at[at.length - 1])
+      jumpToMessage(next.id)
+    })
+
   function toBottom() {
     clearMessageNavigation()
     ensureAllRowsPending = undefined
@@ -1081,6 +1125,45 @@ export function Session(props: {
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
+      },
+    },
+    {
+      title: "Bookmark message",
+      id: "session.bookmark.toggle",
+      group: "Session",
+      slash: { name: "bookmark" },
+      run: () => {
+        dialog.clear()
+        const messageID = messageAtTop()
+        if (!messageID) return
+        const message = data.session.message.get(route.sessionID, messageID)
+        if (!message) return
+        bookmarks.toggle({
+          sessionID: route.sessionID,
+          messageID,
+          text: bookmarkText(message).replace(/\s+/g, " ").trim(),
+          created: Date.now(),
+        })
+      },
+    },
+    {
+      title: "Next bookmark",
+      id: "session.bookmark.next",
+      group: "Session",
+      palette: undefined,
+      run: () => {
+        dialog.clear()
+        cycleBookmark("next")
+      },
+    },
+    {
+      title: "Previous bookmark",
+      id: "session.bookmark.previous",
+      group: "Session",
+      palette: undefined,
+      run: () => {
+        dialog.clear()
+        cycleBookmark("prev")
       },
     },
     {
@@ -2029,6 +2112,48 @@ function SessionPartView(props: {
   )
 }
 
+function bookmarkText(message: SessionMessageInfo) {
+  if (message.type === "user") return message.text
+  if (message.type === "assistant")
+    return message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+  return "text" in message ? message.text : ""
+}
+
+function MessageStar(props: { sessionID: string; messageID: string; text: () => string }) {
+  const theme = useTheme()
+  const renderer = useRenderer()
+  const bookmarks = useBookmarks()
+  const [hover, setHover] = createSignal(false)
+  const marked = createMemo(() => bookmarks.isBookmarked(props.sessionID, props.messageID))
+  return (
+    <text
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={(event: { stopPropagation(): void }) => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        event.stopPropagation()
+        bookmarks.toggle({
+          sessionID: props.sessionID,
+          messageID: props.messageID,
+          text: props.text().replace(/\s+/g, " ").trim(),
+          created: Date.now(),
+        })
+      }}
+    >
+      <span
+        style={{
+          fg: marked() ? theme.text.feedback.warning.base : hover() ? theme.text.base : theme.text.muted,
+        }}
+      >
+        {marked() ? " ★ " : " ☆ "}
+      </span>
+    </text>
+  )
+}
+
 function AssistantHeader(props: { message: SessionMessageAssistant }) {
   const theme = useTheme()
   return (
@@ -2113,6 +2238,16 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         >
           <span style={{ fg: copyHover() ? theme.text.base : theme.text.muted }}> ⧉ </span>
         </text>
+        <MessageStar
+          sessionID={ctx.sessionID}
+          messageID={props.message.id}
+          text={() =>
+            props.message.content
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n")
+          }
+        />
         <text>
           <span style={{ fg: theme.text.muted }}>·{" "}</span>
           <span style={{ fg: props.message.error ? theme.text.muted : local.agent.color(props.message.agent) }}>
@@ -2489,7 +2624,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.muted}>{`[${Locale.stamp(props.message.time.created)}]`}</text>
+          <box flexDirection="row">
+            <text fg={theme.text.muted}>{`[${Locale.stamp(props.message.time.created)}]`}</text>
+            <MessageStar sessionID={ctx.sessionID} messageID={props.message.id} text={() => props.message.text} />
+          </box>
           <text fg={theme.text.base}>{props.message.text}</text>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">

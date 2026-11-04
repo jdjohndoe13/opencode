@@ -107,6 +107,7 @@ import { DialogVariant } from "./component/dialog-variant"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
+import { BookmarksProvider } from "./context/bookmarks"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
 import { ClientMcp } from "./context/client-mcp"
@@ -432,12 +433,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                             updater={input.updater}
                                                                           >
                                                                             <PanelProvider>
-                                                                              <PluginProvider
-                                                                                packages={input.packages}
-                                                                                directories={pluginDirectories}
-                                                                              >
-                                                                                <App />
-                                                                              </PluginProvider>
+                                                                              <BookmarksProvider>
+                                                                                <PluginProvider
+                                                                                  packages={input.packages}
+                                                                                  directories={pluginDirectories}
+                                                                                >
+                                                                                  <App />
+                                                                                </PluginProvider>
+                                                                              </BookmarksProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
                                                                         </AttentionProvider>

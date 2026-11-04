@@ -506,6 +506,13 @@ export interface UI {
     /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
     current(): { readonly name: string; readonly sessionID: string } | undefined
   }
+  readonly session: {
+    /**
+     * Scrolls the transcript to a message, revealing it even when its rows
+     * are virtualized away. No-op when the session is not currently open.
+     */
+    revealMessage(sessionID: string, messageID: string): void
+  }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */
     enabled(): boolean

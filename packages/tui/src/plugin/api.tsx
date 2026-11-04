@@ -28,6 +28,7 @@ import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
+import { useBookmarks } from "../context/bookmarks"
 import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
@@ -79,6 +80,7 @@ export function usePluginHost() {
     toast: useToast(),
     attention: useAttention(),
     storage: useStorage(),
+    bookmarks: useBookmarks(),
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
     local: useLocal(),
@@ -240,6 +242,12 @@ export function createPluginContext(input: {
           const current = host.panel?.current()
           if (current?.plugin !== input.id) return
           return { name: current.name, sessionID: current.sessionID }
+        },
+      },
+      session: {
+        revealMessage(sessionID, messageID) {
+          if (host.route.data.type !== "session" || host.route.data.sessionID !== sessionID) return
+          host.bookmarks.request(sessionID, messageID)
         },
       },
       tabs: {
