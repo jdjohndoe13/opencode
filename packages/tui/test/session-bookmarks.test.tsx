@@ -27,7 +27,29 @@ const messages = Array.from({ length: 30 }, (_, turn) => [
     model: { providerID: "fixture", id: "fixture" },
     finish: "stop" as const,
     time: { created: turn * 10 + 1, completed: turn * 10 + 2 },
-    content: [{ type: "text" as const, text: `Bookmark answer ${turn}` }],
+    content: [
+      { type: "text" as const, text: `Bookmark answer ${turn}` },
+      // Turn 25 asked a question and the user picked an option; the answer
+      // lives in the tool's metadata, and the "My messages" block must show
+      // it as one of the user's own entries. It sits among the newest ten
+      // entries so the capped list renders it.
+      ...(turn === 25
+        ? [
+            {
+              type: "tool" as const,
+              id: `call_${turn}`,
+              name: "question",
+              state: {
+                status: "completed" as const,
+                input: { questions: [{ question: "Which layout?" }] },
+                content: [{ type: "text" as const, text: "User has answered your questions." }],
+                metadata: { answers: [["Sidebar rail"]] },
+              },
+              time: { created: turn * 10 + 1, completed: turn * 10 + 2 },
+            },
+          ]
+        : []),
+    ],
   },
 ])
   .flat()
@@ -96,8 +118,11 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     expect(frame).toContain("★ Second answer nine")
     expect(frame).toContain("★ First prompt zero")
     // The "My messages" block sits above the bookmarks and lists the user's
-    // own messages newest-first, capped by a nested scroll region.
-    expect(frame).toContain("My messages ⌕ (30)")
+    // own messages and question answers newest-first, capped by a nested
+    // scroll region. The "Sidebar rail" row is the answer the user picked
+    // when the agent asked a question at turn 25.
+    expect(frame).toContain("My messages ⌕ (31)")
+    expect(frame).toContain("Sidebar rail")
     expect(headerAt(frame, "My messages")!.row).toBeLessThan(headerAt(frame, "Bookmarks")!.row)
 
     // The previous bookmark is the oldest one: the transcript scrolls up to it.
@@ -170,7 +195,7 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
 
     await clickTriangle("My messages", "collapse")
     const collapsed = app.captureCharFrame()
-    expect(headerAt(collapsed, "My messages")!.line).toContain("(30)")
+    expect(headerAt(collapsed, "My messages")!.line).toContain("(31)")
     expect(headerAt(collapsed, "My messages")!.line).toContain("⌕")
     expect(myMessages()).toBe(0)
     // The bookmarks block is untouched by the other block's collapse.
