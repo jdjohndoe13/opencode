@@ -1,12 +1,21 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, For, Show, createSignal } from "solid-js"
 import { sessionBookmarks, useBookmarks } from "../../context/bookmarks"
+import { DialogBookmarks } from "../../component/dialog-bookmarks"
 import { Locale } from "../../util/locale"
 
 export function SidebarBookmarks(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
   const bookmarks = useBookmarks()
+  const [searchHover, setSearchHover] = createSignal(false)
+  const openSearch = () =>
+    props.context.ui.dialog.show(() => (
+      <DialogBookmarks
+        sessionID={props.sessionID}
+        onJump={(messageID) => bookmarks.request(props.sessionID, messageID)}
+      />
+    ))
   const list = createMemo(() =>
     sessionBookmarks(bookmarks.entries(), props.sessionID)
       .toReversed()
@@ -35,6 +44,25 @@ export function SidebarBookmarks(props: { context: Plugin.Context; sessionID: st
               <span style={{ fg: theme.text.muted }}> ({list().length})</span>
             </Show>
           </text>
+          <box
+            onMouseDown={(event: { stopPropagation(): void }) => event.stopPropagation()}
+            onMouseOver={() => setSearchHover(true)}
+            onMouseOut={() => setSearchHover(false)}
+            onMouseUp={(event: { stopPropagation(): void }) => {
+              event.stopPropagation()
+              openSearch()
+            }}
+          >
+            <text
+              width={1}
+              height={1}
+              wrapMode="none"
+              selectable={false}
+              fg={searchHover() ? theme.text.base : theme.text.action.secondary.base}
+            >
+              ⌕
+            </text>
+          </box>
         </box>
         <Show when={list().length <= 2 || view.open}>
           <For each={list()}>
