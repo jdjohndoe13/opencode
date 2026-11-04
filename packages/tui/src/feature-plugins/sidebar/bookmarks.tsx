@@ -29,20 +29,14 @@ export function SidebarBookmarks(props: { context: Plugin.Context; sessionID: st
           flexDirection="row"
           gap={1}
           onMouseDown={() => {
-            if (list().length <= 2) return
             void updateView((draft) => {
               draft.open = !draft.open
             }).catch((error) => console.error("Failed to persist bookmarks sidebar state", error))
           }}
         >
-          <Show when={list().length > 2}>
-            <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
-          </Show>
-          <text fg={theme.text.base}>
+          <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
+          <text fg={theme.text.base} wrapMode="none">
             <b>Bookmarks</b>
-            <Show when={!view.open}>
-              <span style={{ fg: theme.text.muted }}> ({list().length})</span>
-            </Show>
           </text>
           <box
             onMouseDown={(event: { stopPropagation(): void }) => event.stopPropagation()}
@@ -63,8 +57,11 @@ export function SidebarBookmarks(props: { context: Plugin.Context; sessionID: st
               ⌕
             </text>
           </box>
+          <text fg={theme.text.muted} wrapMode="none">
+            ({list().length})
+          </text>
         </box>
-        <Show when={list().length <= 2 || view.open}>
+        <Show when={view.open}>
           <For each={list()}>
             {(item) => (
               <box
