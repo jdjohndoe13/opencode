@@ -119,6 +119,25 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     await app.mockMouse.click(footer.indexOf("★") + 1, starRow)
     await app.waitForFrame((next) => !next.includes("Second answer nine") && next.includes("First prompt zero"))
     expect((await stored()).map((entry) => entry.messageID)).toEqual([id(0, 0)])
+
+    // The sidebar header's magnifying glass opens a searchable bookmark list.
+    // The glyph is a single cell, so the click must land exactly on it.
+    const lines = app.captureCharFrame().split("\n")
+    const glassRow = lines.findIndex((line) => line.includes("⌕"))
+    expect(glassRow).toBeGreaterThanOrEqual(0)
+    await app.mockMouse.click(lines[glassRow]!.indexOf("⌕"), glassRow)
+    await app.waitForFrame((next) => next.includes("Search bookmarks"))
+
+    // A query matching nothing reports it; narrowing to the first bookmark
+    // and pressing Enter closes the dialog and scrolls the transcript to it.
+    await app.mockInput.typeText("zzzz")
+    await app.waitForFrame((next) => next.includes("No results found"))
+    for (let i = 0; i < 4; i++) app.mockInput.pressBackspace()
+    await app.mockInput.typeText("First")
+    app.mockInput.pressEnter()
+    await app.waitForFrame(
+      (next) => !next.includes("Search bookmarks") && next.includes("First prompt zero") && shown(next, "Bookmark prompt 0"),
+    )
   } finally {
     if (!app.renderer.isDestroyed) app.renderer.destroy()
   }
