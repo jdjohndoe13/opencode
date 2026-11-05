@@ -10,14 +10,20 @@ import { errorMessage } from "../../util/error"
 import { Locale } from "../../util/locale"
 import { usePromptRestore } from "../../prompt/restore"
 
-export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
+export function DialogFork(props: {
+  sessionID: string
+  messageID?: string
+  /** Fork immediately with no boundary, taking the whole session; the picker would offer this as "Full session". */
+  autoFork?: boolean
+  onMove?: (messageID?: string) => void
+}) {
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
   const route = useRoute()
   const toast = useToast()
   const restorePrompt = usePromptRestore()
-  const [pending, setPending] = createSignal(!!props.messageID)
+  const [pending, setPending] = createSignal(!!props.messageID || props.autoFork === true)
 
   const fork = async (messageID?: string) => {
     setPending(true)
@@ -51,7 +57,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
 
   onMount(() => {
     dialog.setSize("large")
-    if (props.messageID) void fork(props.messageID)
+    if (props.messageID || props.autoFork) void fork(props.messageID)
   })
 
   const options = createMemo((): DialogSelectOption<string | undefined>[] => [

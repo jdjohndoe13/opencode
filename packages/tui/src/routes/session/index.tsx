@@ -2154,6 +2154,31 @@ function MessageStar(props: { sessionID: string; messageID: string; text: () => 
   )
 }
 
+function MessageFork(props: { sessionID: string; messageID?: string; autoFork?: boolean }) {
+  const theme = useTheme()
+  const renderer = useRenderer()
+  const dialog = useDialog()
+  const [hover, setHover] = createSignal(false)
+  return (
+    <text
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={(event: { stopPropagation(): void }) => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        event.stopPropagation()
+        // Forks at the boundary the row chose: the prompt's row forks before the prompt
+        // (its text lands in the composer), a reply's footer forks before the next message,
+        // so the new session keeps the conversation up to and including that reply.
+        dialog.replace(() => (
+          <DialogFork sessionID={props.sessionID} messageID={props.messageID} autoFork={props.autoFork} />
+        ))
+      }}
+    >
+      <span style={{ fg: hover() ? theme.text.base : theme.text.muted }}> ⎇ </span>
+    </text>
+  )
+}
+
 function AssistantHeader(props: { message: SessionMessageAssistant }) {
   const theme = useTheme()
   return (
@@ -2247,6 +2272,14 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
               .map((part) => part.text)
               .join("\n")
           }
+        />
+        <MessageFork
+          sessionID={ctx.sessionID}
+          // The footer sits at the end of the reply, so its fork keeps the reply: the boundary
+          // is the next message in the (ascending) list, and for the newest reply the whole
+          // session is the fork.
+          messageID={messages()[(ctx.messageIndex(props.message.id) ?? -1) + 1]?.id}
+          autoFork={ctx.messageIndex(props.message.id) === messages().length - 1}
         />
         <text>
           <span style={{ fg: theme.text.muted }}>·{" "}</span>
@@ -2627,6 +2660,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           <box flexDirection="row">
             <text fg={theme.text.muted}>{`[${Locale.stamp(props.message.time.created)}]`}</text>
             <MessageStar sessionID={ctx.sessionID} messageID={props.message.id} text={() => props.message.text} />
+            <MessageFork sessionID={ctx.sessionID} messageID={props.message.id} />
           </box>
           <text fg={theme.text.base}>{props.message.text}</text>
           <Show when={skills().length}>
