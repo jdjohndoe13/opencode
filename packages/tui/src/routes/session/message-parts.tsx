@@ -12,6 +12,7 @@ import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
+import { stripBookmarkMarker } from "../../context/bookmarks"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
@@ -215,7 +216,7 @@ export function TextPart(props: {
     text: props.part.text.trim(),
   }))
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={stripBookmarkMarker(props.part.text).trim()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
@@ -225,7 +226,7 @@ export function TextPart(props: {
           }}
           syntaxStyle={syntax()}
           renderBlock={plugins.markdown()}
-          content={props.part.text.trim()}
+          content={stripBookmarkMarker(props.part.text).trim()}
           streaming={props.message.time.completed === undefined}
           tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}
