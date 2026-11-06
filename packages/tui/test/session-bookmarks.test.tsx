@@ -28,7 +28,12 @@ const messages = Array.from({ length: 30 }, (_, turn) => [
     finish: "stop" as const,
     time: { created: turn * 10 + 1, completed: turn * 10 + 2 },
     content: [
-      { type: "text" as const, text: `Bookmark answer ${turn}` },
+      // Turn 28's report carries the marker: the TUI must bookmark it
+      // automatically and hide the marker line from the transcript.
+      {
+        type: "text" as const,
+        text: turn === 28 ? "Bookmark answer 28\n⚑ BOOKMARK" : `Bookmark answer ${turn}`,
+      },
       // Turn 25 asked a question and the user picked an option; the answer
       // lives in the tool's metadata, and the "My messages" block must show
       // it as one of the user's own entries. It sits among the newest ten
@@ -117,6 +122,11 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     const frame = app.captureCharFrame()
     expect(frame).toContain("★ Second answer nine")
     expect(frame).toContain("★ First prompt zero")
+    // The turn-28 report carried the `⚑ BOOKMARK` marker, so the TUI
+    // bookmarked it automatically: the row appears in the sidebar and the
+    // marker line itself is hidden from the transcript.
+    await app.waitForFrame((next) => next.includes("★ Bookmark answer 28"))
+    expect(app.captureCharFrame()).not.toContain("⚑ BOOKMARK")
     // The "My messages" block sits above the bookmarks and lists the user's
     // own messages and question answers newest-first, capped by a nested
     // scroll region. The "Sidebar rail" row is the answer the user picked
@@ -156,7 +166,7 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     const starRow = app.captureCharFrame().split("\n").lastIndexOf(footer)
     await app.mockMouse.click(footer.indexOf("★") + 1, starRow)
     await app.waitForFrame((next) => !next.includes("Second answer nine") && next.includes("First prompt zero"))
-    expect((await stored()).map((entry) => entry.messageID)).toEqual([id(0, 0)])
+    expect((await stored()).map((entry) => entry.messageID)).toEqual([id(0, 0), id(28, 1)])
 
     // The bookmarks header's magnifying glass opens a searchable bookmark
     // list. The glyph is a single cell, so the click must land exactly on it.
@@ -205,7 +215,7 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
 
     await clickTriangle("Bookmarks", "collapse")
     const collapsedBookmarks = app.captureCharFrame()
-    expect(headerAt(collapsedBookmarks, "Bookmarks")!.line).toContain("(1)")
+    expect(headerAt(collapsedBookmarks, "Bookmarks")!.line).toContain("(2)")
     expect(collapsedBookmarks).not.toContain("★ First prompt zero")
     await clickTriangle("Bookmarks", "expand")
     expect(app.captureCharFrame()).toContain("★ First prompt zero")

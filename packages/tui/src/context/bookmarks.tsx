@@ -15,6 +15,22 @@ type PendingJump = { readonly sessionID: string; readonly messageID: string; rea
 
 export const BOOKMARKS_LIMIT = 200
 
+// When the user asks the agent to bookmark its report, the agent ends the
+// message with a line containing only this marker (see the system prompt);
+// the session route watches for it and bookmarks the message.
+export const BOOKMARK_MARKER = "⚑ BOOKMARK"
+
+export function hasBookmarkMarker(text: string) {
+  return text.split(/\r?\n/).some((line) => line.trim() === BOOKMARK_MARKER)
+}
+
+export function stripBookmarkMarker(text: string) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== BOOKMARK_MARKER)
+    .join("\n")
+}
+
 export function toggleBookmarks(entries: readonly BookmarkEntry[], entry: BookmarkEntry) {
   const exists = entries.some((item) => item.sessionID === entry.sessionID && item.messageID === entry.messageID)
   if (exists)
@@ -42,6 +58,15 @@ export const { use: useBookmarks, provider: BookmarksProvider } = createSimpleCo
       toggle: (entry: BookmarkEntry) => {
         void update((draft) => {
           draft.entries = toggleBookmarks(draft.entries, entry)
+        }).catch((error) => console.error("Failed to persist message bookmarks", error))
+      },
+      // Add-if-missing, for the marker auto-bookmark: a re-run of the
+      // watcher must never toggle an existing bookmark off.
+      mark: (entry: BookmarkEntry) => {
+        if (file.entries.some((item) => item.sessionID === entry.sessionID && item.messageID === entry.messageID))
+          return
+        void update((draft) => {
+          draft.entries = [...draft.entries, entry].slice(-BOOKMARKS_LIMIT)
         }).catch((error) => console.error("Failed to persist message bookmarks", error))
       },
       // Drop entries whose message no longer exists (deleted session, revert).
