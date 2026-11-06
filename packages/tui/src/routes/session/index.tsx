@@ -18,7 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
-import { useBookmarks, sessionBookmarks } from "../../context/bookmarks"
+import { useBookmarks, sessionBookmarks, hasBookmarkMarker, stripBookmarkMarker } from "../../context/bookmarks"
 import { SplitBorder } from "../../ui/border"
 import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
@@ -910,6 +910,28 @@ export function Session(props: {
     bookmarks.prune((sessionID, messageID) =>
       sessionID === route.sessionID ? list.some((message) => message.id === messageID) : true,
     )
+  })
+  // The agent marks a report it should be bookmarked with a `⚑ BOOKMARK`
+  // line when the user asks it to (see the system prompt). The marker is a
+  // one-time instruction: each completed message is scanned once, so a
+  // manual un-bookmark is not re-added while the session runs.
+  const markerSeen = new Set<string>()
+  createEffect(() => {
+    const boundary = session()?.revert?.messageID
+    for (const message of messages()) {
+      if (message.type !== "assistant" || message.time.completed === undefined) continue
+      if (boundary && message.id >= boundary) continue
+      if (markerSeen.has(message.id)) continue
+      const raw = rawBookmarkText(message)
+      if (!hasBookmarkMarker(raw)) continue
+      markerSeen.add(message.id)
+      bookmarks.mark({
+        sessionID: route.sessionID,
+        messageID: message.id,
+        text: stripBookmarkMarker(raw).replace(/\s+/g, " ").trim(),
+        created: Date.now(),
+      })
+    }
   })
 
   // The message closest to the top of the viewport, used by the keyboard
@@ -2113,6 +2135,10 @@ function SessionPartView(props: {
 }
 
 function bookmarkText(message: SessionMessageInfo) {
+  return stripBookmarkMarker(rawBookmarkText(message))
+}
+
+function rawBookmarkText(message: SessionMessageInfo) {
   if (message.type === "user") return message.text
   if (message.type === "assistant")
     return message.content
@@ -2213,11 +2239,12 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const renderer = useRenderer()
   const [copyHover, setCopyHover] = createSignal(false)
   const copyMessage = () => {
-    const text = props.message.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
-      .trim()
+    const text = stripBookmarkMarker(
+      props.message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    ).trim()
     if (!text) {
       toast.show({ message: "No text content found in this message", variant: "error" })
       return
@@ -2267,10 +2294,12 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           sessionID={ctx.sessionID}
           messageID={props.message.id}
           text={() =>
-            props.message.content
-              .filter((part) => part.type === "text")
-              .map((part) => part.text)
-              .join("\n")
+            stripBookmarkMarker(
+              props.message.content
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join("\n"),
+            )
           }
         />
         <MessageFork
