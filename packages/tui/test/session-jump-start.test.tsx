@@ -51,10 +51,13 @@ test("the top-right jump-to-start indicator appears when content is above and ju
   const scroll = find(app.renderer.root)
   if (!scroll) throw new Error("Session scrollbox not found")
 
-  // At the bottom the reader follows the tail: neither indicator is offered.
+  // The tail budget unmounts older rows even at the bottom, so a long session always
+  // has content above the reader: the start indicator is offered while following the
+  // tail, and only the bottom indicator is suppressed.
   expect(app.captureCharFrame()).not.toContain("Jump to latest")
-  expect(app.captureCharFrame()).not.toContain("Jump to start")
+  expect(app.captureCharFrame()).toContain("Jump to start")
 
+  // Scrolling up keeps both indicators offered: content remains above and below.
   for (let tick = 0; tick < 3; tick++) await app.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "up")
   await app.waitForFrame((frame) => frame.includes("Jump to latest") && frame.includes("Jump to start"))
   expect(scroll.scrollTop).toBeGreaterThan(0)
