@@ -306,9 +306,14 @@ export function Session(props: {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  const [awayFromTop, setAwayFromTop] = createSignal(false)
+  const [startHovered, setStartHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
+  })
+  createEffect(() => {
+    if (!awayFromTop()) setStartHovered(false)
   })
 
   const clearMessageNavigation = () => {
@@ -529,6 +534,15 @@ export function Session(props: {
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
+  function isAwayFromTop() {
+    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
+      return false
+    // The tail budget unmounts older rows even at the bottom, so `hidden() > 0` alone
+    // does not mean the reader has content above them; only while away from the bottom
+    // does the older span (mounted or unmounted) sit above the viewport.
+    if (!isAwayFromBottom()) return false
+    return scroll.scrollTop > 0 || hidden() > 0
+  }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending || !!firstJump()
     if (isAwayFromBottom()) setHiddenRows((current) => current ?? hidden())
@@ -538,6 +552,7 @@ export function Session(props: {
       if (!scroll || scroll.isDestroyed) return
       const away = preserveWindow || isAwayFromBottom()
       setAwayFromBottom(away)
+      setAwayFromTop(preserveWindow || isAwayFromTop())
       if (!away) {
         if (!renderer.getSelection()) setHiddenRows(undefined)
         scroll.stickyScroll = true
@@ -1037,82 +1052,84 @@ export function Session(props: {
     },
   ]
 
+  const toTop = () => {
+    if (firstJump()) return
+    clearMessageNavigation()
+    const request = new AbortController()
+    const cancel = () => request.abort()
+    setFirstJump(() => cancel)
+    const start = () => {
+      if (firstJump() !== cancel || scroll.isDestroyed) return
+      if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending) return afterLayout(start)
+      const previous = { start: hiddenRows(), end: visibleRowsEnd() }
+      const restore = () => {
+        cancel()
+        batch(() => {
+          setHiddenRows(previous.start)
+          setVisibleRowsEnd(previous.end)
+        })
+      }
+      const commit = () => {
+        if (firstJump() !== restore || scroll.isDestroyed) return
+        scroll.stickyScroll = false
+        batch(() => {
+          setHiddenRows(0)
+          // Budget by rendered entries, not row index: reply-header rows are
+          // zero-weight, so a raw index would mount fewer messages than the
+          // head budget promises.
+          setVisibleRowsEnd(rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK))
+          setFirstJump(() => cancel)
+        })
+      }
+      // Pin both ends until the head budget commits in the same batch as history.
+      batch(() => {
+        setFirstJump(() => restore)
+        setHiddenRows(hidden())
+        setVisibleRowsEnd(visibleEnd())
+      })
+      void data.session.message
+        .loadMore(route.sessionID, {
+          all: true,
+          signal: request.signal,
+          beforePublish: commit,
+        })
+        .then(
+          () => {
+            commit()
+            if (firstJump() !== cancel || scroll.isDestroyed) return
+            // Rows are published now; the pre-publish commit budgeted against the
+            // old row list (and header rows are zero-weight), so re-derive the
+            // head budget from the full weights.
+            setVisibleRowsEnd(
+              rows.length <= TRANSCRIPT_BACKFILL_CHUNK ? undefined : rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK),
+            )
+            scroll.scrollTo(0)
+            afterLayout(() => {
+              if (firstJump() !== cancel) return
+              scroll.scrollTo(0)
+              setFirstJump(undefined)
+              updateAwayFromBottom()
+            })
+          },
+          (error) => {
+            if (firstJump() !== restore || scroll.isDestroyed) return
+            clearMessageNavigation()
+            toast.error(error)
+            updateAwayFromBottom()
+          },
+        )
+    }
+    prependHistory.after(start)
+    dialog.clear()
+  }
+
   const baseAndUnfocusedCommands = [
     {
       id: "session.first",
       title: "First message",
       group: "Session",
       palette: undefined,
-      run: () => {
-        if (firstJump()) return
-        clearMessageNavigation()
-        const request = new AbortController()
-        const cancel = () => request.abort()
-        setFirstJump(() => cancel)
-        const start = () => {
-          if (firstJump() !== cancel || scroll.isDestroyed) return
-          if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending) return afterLayout(start)
-          const previous = { start: hiddenRows(), end: visibleRowsEnd() }
-          const restore = () => {
-            cancel()
-            batch(() => {
-              setHiddenRows(previous.start)
-              setVisibleRowsEnd(previous.end)
-            })
-          }
-          const commit = () => {
-            if (firstJump() !== restore || scroll.isDestroyed) return
-            scroll.stickyScroll = false
-            batch(() => {
-              setHiddenRows(0)
-              // Budget by rendered entries, not row index: reply-header rows are
-              // zero-weight, so a raw index would mount fewer messages than the
-              // head budget promises.
-              setVisibleRowsEnd(rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK))
-              setFirstJump(() => cancel)
-            })
-          }
-          // Pin both ends until the head budget commits in the same batch as history.
-          batch(() => {
-            setFirstJump(() => restore)
-            setHiddenRows(hidden())
-            setVisibleRowsEnd(visibleEnd())
-          })
-          void data.session.message
-            .loadMore(route.sessionID, {
-              all: true,
-              signal: request.signal,
-              beforePublish: commit,
-            })
-            .then(
-              () => {
-                commit()
-                if (firstJump() !== cancel || scroll.isDestroyed) return
-                // Rows are published now; the pre-publish commit budgeted against the
-                // old row list (and header rows are zero-weight), so re-derive the
-                // head budget from the full weights.
-                setVisibleRowsEnd(
-                  rows.length <= TRANSCRIPT_BACKFILL_CHUNK ? undefined : rowsAfter(weights(), 0, TRANSCRIPT_BACKFILL_CHUNK),
-                )
-                scroll.scrollTo(0)
-                afterLayout(() => {
-                  if (firstJump() !== cancel) return
-                  scroll.scrollTo(0)
-                  setFirstJump(undefined)
-                  updateAwayFromBottom()
-                })
-              },
-              (error) => {
-                if (firstJump() !== restore || scroll.isDestroyed) return
-                clearMessageNavigation()
-                toast.error(error)
-                updateAwayFromBottom()
-              },
-            )
-        }
-        prependHistory.after(start)
-        dialog.clear()
-      },
+      run: toTop,
     },
     {
       id: "session.last",
@@ -1637,6 +1654,23 @@ export function Session(props: {
           paddingRight={dimensions().width < 44 ? 1 : 2}
         >
           <Show when={session()}>
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+              <Show when={!firstJump() && awayFromTop()}>
+                <box
+                  id="session-jump-to-start"
+                  paddingLeft={1}
+                  onMouseOver={() => setStartHovered(true)}
+                  onMouseOut={() => setStartHovered(false)}
+                  onMouseUp={toTop}
+                >
+                  <text
+                    fg={startHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+                  >
+                    Jump to start ↑
+                  </text>
+                </box>
+              </Show>
+            </box>
             <box flexGrow={1} minHeight={0} position="relative">
               <scrollbox
                 ref={(r) => {
