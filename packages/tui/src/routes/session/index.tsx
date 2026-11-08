@@ -537,10 +537,9 @@ export function Session(props: {
   function isAwayFromTop() {
     if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
       return false
-    // The tail budget unmounts older rows even at the bottom, so `hidden() > 0` alone
-    // does not mean the reader has content above them; only while away from the bottom
-    // does the older span (mounted or unmounted) sit above the viewport.
-    if (!isAwayFromBottom()) return false
+    // The counterpart of the bottom indicator: show whenever anything sits above the
+    // viewport — mounted rows (scrollTop > 0) or older rows unmounted by the tail
+    // budget (hidden() > 0, which also holds at the bottom of a long session).
     return scroll.scrollTop > 0 || hidden() > 0
   }
   function updateAwayFromBottom() {
