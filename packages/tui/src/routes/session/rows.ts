@@ -7,7 +7,9 @@ import { useClient } from "../../context/client"
 import {
   append,
   completePrevious,
-  groupRefs,
+  groupFirstMessageID,
+  groupHasMessage,
+  groupHasRef,
   hasPart,
   messagePath,
   partitionPending,
@@ -238,13 +240,16 @@ export function createSessionRows(
           return
         }
         if (part.type !== "reasoning" || part.time?.completed === undefined) return
-        const row = draft.find(
-          (row) =>
-            row.type === "group" &&
-            row.kind === "reasoning" &&
-            groupRefs(row).some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
-        )
-        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
+        // Tail-first: the completed reasoning group is the streaming one, so
+        // it sits at the end of the array.
+        for (let i = draft.length - 1; i >= 0; i--) {
+          const row = draft[i]!
+          if (row.type !== "group" || row.kind !== "reasoning") continue
+          if (groupHasRef(row, ref)) {
+            row.completed = true
+            break
+          }
+        }
       }),
     )
 
@@ -273,6 +278,17 @@ export function createSessionRows(
   }
 
   const queuedStart = (rows: SessionRow[]) => {
+    // The scan is for the first pending row: undelivered input or a running
+    // compaction. Without either every row is already delivered, so the
+    // common streaming case ends with the store reads instead of walking the
+    // whole transcript. A running compaction is always the newest message.
+    const pending = data.session.pending.list(sessionID())
+    const messages = data.session.message.list(sessionID())
+    const last = messages[messages.length - 1]
+    // A running compaction is always the newest message: nothing else is
+    // appended while it runs, and the input it was waiting on has left the
+    // pending list by then.
+    if (pending.length === 0 && !(last?.type === "compaction" && last.status === "running")) return rows.length
     const index = rows.findIndex(
       (row) => row.type === "compaction-queued" || (row.type === "message" && isPending(row.messageID)),
     )
@@ -515,7 +531,7 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
     row.type === "part"
       ? row.ref.messageID
       : row.type === "group"
-        ? groupRefs(row)[0]?.messageID
+        ? groupFirstMessageID(row)
         : row.type === "assistant-header" || row.type === "assistant-footer"
           ? row.messageID
           : row.type === "turn-usage"
@@ -537,11 +553,17 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
 
 /** A message already has a rendered row, so its first-part stamp already landed. */
 function hasPartOfMessage(rows: SessionRow[], messageID: string) {
-  return rows.some((row) => {
-    if (row.type === "part") return row.ref.messageID === messageID
-    if (row.type !== "group") return false
-    return groupRefs(row, true).some((ref) => ref.messageID === messageID)
-  })
+  // Streaming scans tail-first: the queried message is the newest one, so its
+  // row sits at the end of the array and the hit lands after a few steps.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i]!
+    if (row.type === "part") {
+      if (row.ref.messageID === messageID) return true
+    } else if (row.type === "group") {
+      if (groupHasMessage(row, messageID)) return true
+    }
+  }
+  return false
 }
 
 /**
