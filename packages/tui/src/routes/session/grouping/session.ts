@@ -177,9 +177,58 @@ export function partitionPending(rows: SessionRow[], pending: Set<string>) {
 }
 
 export function hasPart(rows: SessionRow[], ref: PartRef) {
-  return rows.some((row) => {
-    if (row.type === "part") return row.ref.messageID === ref.messageID && row.ref.partID === ref.partID
-    if (row.type !== "group") return false
-    return groupRefs(row, true).some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
-  })
+  // Tail-first: the queried part is the streaming one, so its row sits at the
+  // end of the array and the hit lands after a few steps.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i]!
+    if (row.type === "part") {
+      if (row.ref.messageID === ref.messageID && row.ref.partID === ref.partID) return true
+    } else if (row.type === "group") {
+      if (groupHasRef(row, ref)) return true
+    }
+  }
+  return false
+}
+
+/** Cheaper than materializing `groupRefs`: does the group hold this ref? */
+export function groupHasRef(row: SessionGroup, ref: PartRef) {
+  const visit = (nodes: readonly GroupNode<SessionEntry, GroupKind>[]): boolean =>
+    nodes.some((node) => {
+      if (node.type === "group") return visit(node.children)
+      if (node.entry.type !== "part") return false
+      return node.entry.ref.messageID === ref.messageID && node.entry.ref.partID === ref.partID
+    })
+  return visit(row.children)
+}
+
+/** Cheaper than materializing `groupRefs`: does the group hold any part of this message? */
+export function groupHasMessage(row: SessionGroup, messageID: string) {
+  const visit = (nodes: readonly GroupNode<SessionEntry, GroupKind>[]): boolean =>
+    nodes.some((node) => {
+      if (node.type === "group") return visit(node.children)
+      if (node.entry.type !== "part") return false
+      return node.entry.ref.messageID === messageID
+    })
+  return visit(row.children)
+}
+
+/** The first part ref's message without materializing the group's refs. */
+export function groupFirstMessageID(row: SessionGroup): string | undefined {
+  const pending =
+    row.kind === "exploration" || row.kind === "activity" ? row.pending : ([] as readonly PartRef[])
+  const visit = (nodes: readonly GroupNode<SessionEntry, GroupKind>[]): string | undefined => {
+    for (const node of nodes) {
+      if (node.type === "group") {
+        const nested = visit(node.children)
+        if (nested !== undefined) return nested
+        continue
+      }
+      if (node.entry.type !== "part") continue
+      const ref = node.entry.ref
+      if (pending.some((item) => item.messageID === ref.messageID && item.partID === ref.partID)) continue
+      return ref.messageID
+    }
+    return undefined
+  }
+  return visit(row.children)
 }

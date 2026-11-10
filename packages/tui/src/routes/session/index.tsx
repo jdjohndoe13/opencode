@@ -930,7 +930,10 @@ export function Session(props: {
   // The agent marks a report it should be bookmarked with a `⚑ BOOKMARK`
   // line when the user asks it to (see the system prompt). The marker is a
   // one-time instruction: each completed message is scanned once, so a
-  // manual un-bookmark is not re-added while the session runs.
+  // manual un-bookmark is not re-added while the session runs. Completed
+  // messages without a marker are remembered too — re-reading every
+  // message's text on every streaming delta is what makes long sessions
+  // crawl.
   const markerSeen = new Set<string>()
   createEffect(() => {
     const boundary = session()?.revert?.messageID
@@ -938,9 +941,9 @@ export function Session(props: {
       if (message.type !== "assistant" || message.time.completed === undefined) continue
       if (boundary && message.id >= boundary) continue
       if (markerSeen.has(message.id)) continue
+      markerSeen.add(message.id)
       const raw = rawBookmarkText(message)
       if (!hasBookmarkMarker(raw)) continue
-      markerSeen.add(message.id)
       bookmarks.mark({
         sessionID: route.sessionID,
         messageID: message.id,

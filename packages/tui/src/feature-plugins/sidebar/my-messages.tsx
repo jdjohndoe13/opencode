@@ -3,7 +3,7 @@ import { createMemo, For, Show, createSignal } from "solid-js"
 import { useBookmarks } from "../../context/bookmarks"
 import { DialogMessages } from "../../component/dialog-messages"
 import { Locale } from "../../util/locale"
-import { myMessages } from "../../util/my-messages"
+import { createMyMessages } from "../../util/my-messages"
 
 // Rows the list shows before the nested scroll takes over; the sidebar column
 // is short, so a long transcript must not push the rest of the panel down.
@@ -21,8 +21,9 @@ export function SidebarMyMessages(props: { context: Plugin.Context; sessionID: s
         onJump={(messageID) => bookmarks.request(props.sessionID, messageID)}
       />
     ))
+  const collect = createMyMessages()
   const list = createMemo(() =>
-    myMessages(
+    collect(
       props.context.data.session.message.list(props.sessionID),
       props.context.data.session.get(props.sessionID)?.revert?.messageID,
     ).toReversed(),
