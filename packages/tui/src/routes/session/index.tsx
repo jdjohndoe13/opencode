@@ -535,8 +535,12 @@ export function Session(props: {
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
   function isAwayFromTop() {
-    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
-      return false
+    // `navigationMessage` deliberately stays out of this guard: unlike the flags
+    // around it it persists after the jump settles (it only clears on toTop/toBottom,
+    // keyboard moves, or a resize), so guarding on it would hide the indicator
+    // forever after any click-jump. The geometry below already hides the indicator
+    // at the very top, where a jump to the first message lands.
+    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || firstJump()) return false
     // The counterpart of the bottom indicator: show whenever anything sits above the
     // viewport — mounted rows (scrollTop > 0) or older rows unmounted by the tail
     // budget (hidden() > 0, which also holds at the bottom of a long session).
