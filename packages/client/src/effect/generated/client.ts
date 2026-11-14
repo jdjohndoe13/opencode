@@ -269,6 +269,14 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalBookmarkListInput,
+  ExperimentalBookmarkListOutput,
+  ExperimentalBookmarkMarkInput,
+  ExperimentalBookmarkMarkOutput,
+  ExperimentalBookmarkUnmarkInput,
+  ExperimentalBookmarkUnmarkOutput,
+  ExperimentalMyMessageListInput,
+  ExperimentalMyMessageListOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1715,6 +1723,49 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalBookmarkList =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalBookmarkListInput) =>
+    preserveEffect<ExperimentalBookmarkListOutput>()(
+      raw["bookmark.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalBookmarkMark =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalBookmarkMarkInput) =>
+    preserveEffect<ExperimentalBookmarkMarkOutput>()(
+      raw["bookmark.mark"]({
+        payload: {
+          sessionID: input["sessionID"],
+          messageID: input["messageID"],
+          text: input["text"],
+          created: input["created"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalBookmarkUnmark =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalBookmarkUnmarkInput) =>
+    preserveEffect<ExperimentalBookmarkUnmarkOutput>()(
+      raw["bookmark.unmark"]({ params: { sessionID: input["sessionID"], messageID: input["messageID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalMyMessageList =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMyMessageListInput) =>
+    preserveEffect<ExperimentalMyMessageListOutput>()(
+      raw["myMessage.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1796,12 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  bookmark: {
+    list: EndpointExperimentalBookmarkList(raw),
+    mark: EndpointExperimentalBookmarkMark(raw),
+    unmark: EndpointExperimentalBookmarkUnmark(raw),
+  },
+  myMessage: { list: EndpointExperimentalMyMessageList(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

@@ -10,6 +10,7 @@ import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
+import { Bookmark } from "../bookmark.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -833,7 +834,63 @@ const insertMessage = Effect.fnUntraced(function* (
     { sessionID: event.data.sessionID, messageID: message.id, seq: event.durable.seq },
     data,
   )
+  // "My messages": what the user typed is its own entry, projected once at delivery.
+  if (stored.type === "user")
+    yield* Bookmark.insertMyMessage(db, {
+      sessionID: event.data.sessionID,
+      messageID: message.id,
+      ordinal: 0,
+      text: stored.text,
+      created: timeCreated,
+    })
 })
+
+/**
+ * The assistant's message content as stored, whether it lives in `session_part` rows or in the
+ * message row's inline envelope. Blob refs are not hydrated: marker scanning and answer reads
+ * need text only.
+ */
+const assistantMessage = (db: DatabaseService, sessionID: SessionSchema.ID, messageID: SessionMessage.ID) =>
+  db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.id, messageID),
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "assistant"),
+      ),
+    )
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.flatMap((row) => (row ? SessionHistory.withParts(db, [row]) : Effect.succeed([]))),
+      Effect.map(([row]) => (row ? SessionHistory.decodeMessageRowSync(row) : undefined)),
+    )
+
+/**
+ * A completed assistant message whose text parts carry the `⚑ BOOKMARK` marker line is bookmarked
+ * server-side, with the marker stripped and whitespace collapsed. The marker is a one-time
+ * instruction, so each completed message is scanned once at its completion boundary.
+ */
+function projectBookmarkMarker(db: DatabaseService, event: SessionEvent.Step.Ended | SessionEvent.Step.Failed) {
+  return Effect.gen(function* () {
+    const message = yield* assistantMessage(db, event.data.sessionID, event.data.assistantMessageID)
+    if (message?.type !== "assistant") return
+    const raw = message.content
+      .filter((part): part is Extract<SessionMessage.AssistantContent, { type: "text" }> => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+    if (!Bookmark.hasBookmarkMarker(raw)) return
+    yield* Bookmark.insertBookmark(db, {
+      sessionID: event.data.sessionID,
+      messageID: event.data.assistantMessageID,
+      text: Bookmark.bookmarkText(raw),
+      created: event.created,
+    })
+    yield* Bookmark.trim(db, event.data.sessionID)
+  })
+}
 
 function projectIdle(
   db: DatabaseService,
@@ -1090,6 +1147,7 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* run(db, event)
         yield* applyUsage(db, event.data.sessionID, event.data, event.created)
+        yield* projectBookmarkMarker(db, event)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
@@ -1103,6 +1161,7 @@ const layer = Layer.effectDiscard(
             event.created,
           )
         else yield* touch(db, event)
+        yield* projectBookmarkMarker(db, event)
       }),
     )
     yield* bus.project(SessionEvent.Text.Started, (event) => run(db, event))
@@ -1110,7 +1169,57 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Tool.Success, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        // Question answers are the user's own text even though they ride the tool's event, so
+        // they get their own "My messages" rows keyed to the tool part's ordinal.
+        const text = Bookmark.answerText(event.data.metadata?.answers)
+        if (!text) return
+        const row = yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(
+            and(
+              eq(SessionPartTable.message_id, event.data.assistantMessageID),
+              eq(SessionPartTable.call_id, event.data.id),
+            ),
+          )
+          .orderBy(desc(SessionPartTable.ordinal))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
+        if (row) {
+          const part = SessionHistory.decodePartRowSync(row)
+          if (part.type !== "tool" || part.name !== "question" || part.state.status !== "completed") return
+          yield* Bookmark.insertMyMessage(db, {
+            sessionID: event.data.sessionID,
+            messageID: event.data.assistantMessageID,
+            ordinal: row.ordinal,
+            text,
+            created: event.created,
+          })
+          return
+        }
+        // `experimental.part_rows` off: the tool's part may live only in the message's inline
+        // content, where its ordinal is the content index.
+        const message = yield* assistantMessage(db, event.data.sessionID, event.data.assistantMessageID)
+        if (message?.type !== "assistant") return
+        const index = message.content.findLastIndex(
+          (part) => part.type === "tool" && part.id === event.data.id && part.name === "question",
+        )
+        if (index < 0) return
+        const part = message.content[index]
+        if (part.type !== "tool" || part.state.status !== "completed") return
+        yield* Bookmark.insertMyMessage(db, {
+          sessionID: event.data.sessionID,
+          messageID: event.data.assistantMessageID,
+          ordinal: index,
+          text,
+          created: event.created,
+        })
+      }),
+    )
     yield* bus.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
@@ -1140,6 +1249,20 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
+        // The bookmark and my-message rows keyed to the deleted messages go with them.
+        const deleted = yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gte(SessionMessageTable.seq, boundary.seq)),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        yield* Bookmark.removeForMessages(
+          db,
+          event.data.sessionID,
+          deleted.map((row) => row.id),
+        )
         yield* db
           .delete(SessionMessageTable)
           .where(

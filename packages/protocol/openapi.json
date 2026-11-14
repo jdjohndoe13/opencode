@@ -2104,11 +2104,18 @@
             }
           },
           "409": {
-            "description": "ConflictError",
+            "description": "ConflictError | SessionArchivedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2366,6 +2373,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionArchivedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Activate a skill for a session by appending a skill message and resuming execution.",
@@ -2463,11 +2480,18 @@
             }
           },
           "409": {
-            "description": "ConflictError",
+            "description": "ConflictError | SessionArchivedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2592,6 +2616,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionArchivedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
@@ -2689,11 +2723,18 @@
             }
           },
           "409": {
-            "description": "ConflictError",
+            "description": "ConflictError | SessionArchivedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2874,11 +2915,18 @@
             }
           },
           "409": {
-            "description": "SessionBusyError",
+            "description": "SessionBusyError | SessionArchivedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2982,11 +3030,18 @@
             }
           },
           "409": {
-            "description": "SessionBusyError",
+            "description": "SessionBusyError | SessionArchivedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4086,6 +4141,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionArchivedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionArchivedErrorEncoded"
                 }
               }
             }
@@ -13478,6 +13543,305 @@
         "summary": "List background jobs"
       }
     },
+    "/api/experimental/bookmark": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.bookmark.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MessageBookmark.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List a Session's message bookmarks, oldest first. Experimental: may change without notice.",
+        "summary": "List message bookmarks"
+      },
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.bookmark.mark",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "bookmarked": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["bookmarked"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Adds a bookmark if the message is not bookmarked yet; idempotent. Experimental: may change without notice.",
+        "summary": "Bookmark a message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageBookmark.MarkPayload"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/bookmark/{sessionID}/{messageID}": {
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.bookmark.unmark",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "messageID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.Message.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "removed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["removed"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Removes a message's bookmark. Experimental: may change without notice.",
+        "summary": "Remove a message bookmark"
+      }
+    },
+    "/api/experimental/my-message": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.myMessage.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MyMessage.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List a Session's 'My messages' entries (what the user typed, plus question answers), oldest first. Experimental: may change without notice.",
+        "summary": "List my messages"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -20496,6 +20860,45 @@
         "type": "string",
         "pattern": "^[0-9a-f]{64}$"
       },
+      "MessageBookmark.Info": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "text": {
+            "type": "string"
+          },
+          "created": {
+            "type": "number",
+            "description": "Time in milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["sessionID", "messageID", "text", "created"],
+        "additionalProperties": false
+      },
+      "MessageBookmark.MarkPayload": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "text": {
+            "type": "string"
+          },
+          "created": {
+            "type": "number"
+          }
+        },
+        "required": ["sessionID", "messageID", "text"],
+        "additionalProperties": false
+      },
       "MessageNotFoundErrorEncoded": {
         "type": "object",
         "properties": {
@@ -20874,6 +21277,26 @@
       },
       "Money.USDPerMillionTokens": {
         "type": "number"
+      },
+      "MyMessage.Info": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "text": {
+            "type": "string"
+          },
+          "created": {
+            "type": "number",
+            "description": "Time in milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["sessionID", "messageID", "text", "created"],
+        "additionalProperties": false
       },
       "PairingCode": {
         "type": "object",
@@ -24414,6 +24837,23 @@
           }
         },
         "required": ["type"],
+        "additionalProperties": false
+      },
+      "SessionArchivedErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionArchivedError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
       "SessionBusyErrorEncoded": {

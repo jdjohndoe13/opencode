@@ -15,8 +15,10 @@ import type {
   LocationGetOutput,
   McpResource,
   McpServer,
+  MessageBookmarkInfo,
   ModelInfo,
   ModelRef,
+  MyMessageInfo,
   PermissionSavedInfo,
   PermissionRequest,
   PermissionReplyInput,
@@ -123,6 +125,9 @@ type LocationData = {
 }
 
 type Store = {
+  // Server-derived per-session lists kept outside `session` so they stay siblings of it.
+  bookmark: Record<string, MessageBookmarkInfo[]>
+  myMessage: Record<string, MyMessageInfo[]>
   session: {
     info: Record<string, SessionInfo>
     missing: Record<string, true | undefined>
@@ -330,6 +335,8 @@ export function createData(config: CreateDataInput) {
   }
 
   const [store, setStore] = createStore<Store>({
+    bookmark: {},
+    myMessage: {},
     session: {
       info: {},
       missing: {},
@@ -718,6 +725,8 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.message:${sessionID}`)
     sync.invalidate(`session.permission:${sessionID}`)
     sync.invalidate(`session.form:${sessionID}:`)
+    sync.invalidate(`bookmark:${sessionID}`)
+    sync.invalidate(`myMessage:${sessionID}`)
     setStore(
       "session",
       produce((draft) => {
@@ -734,6 +743,18 @@ export function createData(config: CreateDataInput) {
           if (next.length === 0) delete draft.family[rootID]
           else draft.family[rootID] = next
         }
+      }),
+    )
+    setStore(
+      "bookmark",
+      produce((draft) => {
+        delete draft[sessionID]
+      }),
+    )
+    setStore(
+      "myMessage",
+      produce((draft) => {
+        delete draft[sessionID]
       }),
     )
   }
@@ -930,6 +951,8 @@ export function createData(config: CreateDataInput) {
           message.reindex(draft, index, position)
         })
         compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
+        // The server projects the user's message into "My messages" at delivery.
+        refreshSessionLists(event.data.sessionID)
         return
       }
       case "session.inbox.delivery.changed":
@@ -1062,6 +1085,8 @@ export function createData(config: CreateDataInput) {
           assistant.tokens = event.data.tokens
           if (event.data.snapshot) assistant.snapshot = { ...assistant.snapshot, end: event.data.snapshot }
         })
+        // The server scans the finished message for the bookmark marker at this boundary.
+        refreshSessionLists(event.data.sessionID)
         return
       }
       case "session.step.failed":
@@ -1083,6 +1108,8 @@ export function createData(config: CreateDataInput) {
             assistant.tokens = event.data.tokens
           }
         })
+        // The server scans the failed message for the bookmark marker too.
+        refreshSessionLists(event.data.sessionID)
         return
       case "session.text.started":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
@@ -1146,6 +1173,8 @@ export function createData(config: CreateDataInput) {
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
           tool.time.completed = event.created
         })
+        // Question answers become "My messages" rows server-side at this boundary.
+        if (event.data.metadata?.answers !== undefined) refreshSessionLists(event.data.sessionID)
         return
       case "session.tool.failed":
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
@@ -1278,6 +1307,8 @@ export function createData(config: CreateDataInput) {
           if (position === -1) return
           for (const item of draft.splice(position)) index.delete(item.id)
         })
+        // The projector deletes the bookmark and my-message rows keyed to the deleted messages.
+        refreshSessionLists(event.data.sessionID)
         return
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
@@ -1536,9 +1567,60 @@ export function createData(config: CreateDataInput) {
     }
   })
 
+  // Server-derived per-session lists mirroring the `session.pending` slice: store + `sync.run` +
+  // `invalidate`. `list` returns [] while unsynced.
+  const bookmark = {
+    list(sessionID: string) {
+      return store.bookmark[sessionID] ?? []
+    },
+    sync(sessionID: string) {
+      return sync.run(`bookmark:${sessionID}`, async () => {
+        const started = deletionEpoch
+        const items = await api()
+          .experimental.bookmark.list({ sessionID })
+          .catch(evictMissing)
+        if ((deletedAt.get(sessionID) ?? 0) > started) return
+        setStore("bookmark", sessionID, reconcile(items))
+      })
+    },
+    invalidate(sessionID: string) {
+      sync.invalidate(`bookmark:${sessionID}`)
+    },
+  }
+  const myMessage = {
+    list(sessionID: string) {
+      return store.myMessage[sessionID] ?? []
+    },
+    sync(sessionID: string) {
+      return sync.run(`myMessage:${sessionID}`, async () => {
+        const started = deletionEpoch
+        const items = await api()
+          .experimental.myMessage.list({ sessionID })
+          .catch(evictMissing)
+        if ((deletedAt.get(sessionID) ?? 0) > started) return
+        setStore("myMessage", sessionID, reconcile(items))
+      })
+    },
+    invalidate(sessionID: string) {
+      sync.invalidate(`myMessage:${sessionID}`)
+    },
+  }
+
+  // The server writes these two tables on message events, so the message-sync path piggybacks a
+  // cheap revalidation; no new event types are needed.
+  function refreshSessionLists(sessionID: string) {
+    result.bookmark.invalidate(sessionID)
+    result.myMessage.invalidate(sessionID)
+    refresh(() => result.bookmark.sync(sessionID))
+    refresh(() => result.myMessage.sync(sessionID))
+  }
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
+    /** Per-session message bookmarks, kept at the top level as siblings of `session`. */
+    bookmark,
+    myMessage,
     session: {
       list() {
         return sessions()

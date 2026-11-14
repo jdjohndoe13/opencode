@@ -1,13 +1,15 @@
 import { expect, test } from "bun:test"
-import { mkdir } from "node:fs/promises"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { directory, json } from "./fixture/tui-client"
 import { waitForHighlightedFrame } from "./fixture/frame"
 
-// Message bookmarks: the star beside a message's timestamp persists it, the
-// sidebar lists the session's bookmarks newest-first, and clicking a row or
-// cycling with the leader keys scrolls the transcript to that message.
+// Message bookmarks: the star beside a message's timestamp marks it on the
+// server, the sidebar lists the session's bookmarks newest-first, and
+// clicking a row or cycling with the leader keys scrolls the transcript to
+// that message. The bookmark and "My messages" lists are server-side; the
+// fixture below plays the server: it serves the lists and mutates them for
+// the mark/unmark calls the TUI makes.
 const session = {
   id: "ses_bookmarks",
   title: "Bookmarks",
@@ -28,16 +30,16 @@ const messages = Array.from({ length: 30 }, (_, turn) => [
     finish: "stop" as const,
     time: { created: turn * 10 + 1, completed: turn * 10 + 2 },
     content: [
-      // Turn 28's report carries the marker: the TUI must bookmark it
-      // automatically and hide the marker line from the transcript.
+      // Turn 28's report carries the marker: the server has already
+      // bookmarked it (its row is in the seeded list below), and the TUI
+      // must hide the marker line from the transcript.
       {
         type: "text" as const,
         text: turn === 28 ? "Bookmark answer 28\n⚑ BOOKMARK" : `Bookmark answer ${turn}`,
       },
-      // Turn 25 asked a question and the user picked an option; the answer
-      // lives in the tool's metadata, and the "My messages" block must show
-      // it as one of the user's own entries. It sits among the newest ten
-      // entries so the capped list renders it.
+      // Turn 25 asked a question and the user picked an option; the server
+      // projects the answer into a "My messages" row of its own. It sits
+      // among the newest ten entries so the capped list renders it.
       ...(turn === 25
         ? [
             {
@@ -60,14 +62,28 @@ const messages = Array.from({ length: 30 }, (_, turn) => [
   .flat()
   .reverse()
 
-// The stored text is what the sidebar shows; the transcript keeps showing
-// the message's own text, so the two never collide in a frame assertion.
-const seed = {
-  entries: [
-    { sessionID: session.id, messageID: id(0, 0), text: "First prompt zero", created: 0 },
-    { sessionID: session.id, messageID: id(29, 1), text: "Second answer nine", created: 1 },
-  ],
-}
+type Row = { sessionID: string; messageID: string; text: string; created: number }
+
+// The fixture's in-memory "database". The stored text is what the sidebar
+// shows; the transcript keeps showing the message's own text, so the two
+// never collide in a frame assertion.
+const bookmarkRows = (): Row[] => [
+  { sessionID: session.id, messageID: id(0, 0), text: "First prompt zero", created: 0 },
+  { sessionID: session.id, messageID: id(29, 1), text: "Second answer nine", created: 1 },
+  // The turn-28 report's `⚑ BOOKMARK` marker: the server's projector
+  // bookmarked it with the marker stripped from the stored text.
+  { sessionID: session.id, messageID: id(28, 1), text: "Bookmark answer 28", created: 2 },
+]
+const myRows = (): Row[] => [
+  ...Array.from({ length: 30 }, (_, turn) => ({
+    sessionID: session.id,
+    messageID: id(turn, 0),
+    text: `Bookmark prompt ${turn}`,
+    created: turn * 10,
+  })),
+  // The answer the user picked when the agent asked a question at turn 25.
+  { sessionID: session.id, messageID: id(25, 1), text: "Sidebar rail", created: 25 * 10 + 2 },
+]
 
 const locate = (frame: string, needle: string) => {
   const lines = frame.split("\n")
@@ -94,23 +110,42 @@ const headerAt = (frame: string, title: string) => {
 
 test("bookmarks star, sidebar list, and transcript jump", async () => {
   await using state = await tmpdir()
-  await mkdir(`${state.path}/test/tui`, { recursive: true })
-  const store = `${state.path}/test/tui/message-bookmarks.json`
-  await Bun.write(store, JSON.stringify(seed))
+  const bookmarks = bookmarkRows()
+  const mine = myRows()
+  const calls = [] as string[]
+  const sorted = () => bookmarks.toSorted((a, b) => a.created - b.created)
   await using app = await createAppFixture({
     width: 140,
     height: 44,
     state: state.path,
     args: { sessionID: session.id },
     config: { animations: false, tabs: { mode: "off" } },
-    fetch: (url) => {
+    fetch: (url, request) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (url.pathname === `/api/session/${session.id}/message`) return json({ data: messages, cursor: {} })
       if (url.pathname.endsWith("/inbox") || url.pathname.endsWith("/permission")) return json({ data: [] })
+      if (url.pathname === "/api/experimental/bookmark" && request.method === "GET")
+        return json({ data: sorted() })
+      if (url.pathname === "/api/experimental/bookmark" && request.method === "POST")
+        return request.json().then((body) => {
+          calls.push(`mark:${body.messageID}`)
+          const exists = bookmarks.some((item) => item.messageID === body.messageID)
+          if (!exists) bookmarks.push({ ...body, sessionID: session.id })
+          return json({ data: { bookmarked: !exists } })
+        })
+      if (/^\/api\/experimental\/bookmark\/[^/]+\/[^/]+$/.test(url.pathname) && request.method === "DELETE") {
+        const messageID = url.pathname.split("/").pop()!
+        calls.push(`unmark:${messageID}`)
+        const at = bookmarks.findIndex((item) => item.messageID === messageID)
+        if (at !== -1) bookmarks.splice(at, 1)
+        return json({ data: { removed: at !== -1 } })
+      }
+      if (url.pathname === "/api/experimental/my-message" && request.method === "GET")
+        return json({ data: mine.toSorted((a, b) => a.created - b.created) })
     },
   })
-  const stored = async () => ((await Bun.file(store).json()) as typeof seed).entries
+  const marked = () => bookmarks.map((entry) => entry.messageID)
 
   try {
     await app.ready
@@ -118,15 +153,18 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
 
     // The transcript starts at the newest turn; the oldest turn is virtualized away.
     expect(shown(app.captureCharFrame(), "Bookmark prompt 0")).toBe(false)
-    // The sidebar lists the session's stored bookmarks, newest first.
+    // The sidebar lists the session's server-side bookmarks, newest first.
+    // The lists arrive with the session's initial sync, so wait for them.
+    await app.waitForFrame(
+      (next) =>
+        next.includes("★ Second answer nine") && next.includes("★ First prompt zero") && next.includes("My messages"),
+    )
     const frame = app.captureCharFrame()
-    expect(frame).toContain("★ Second answer nine")
-    expect(frame).toContain("★ First prompt zero")
-    // The turn-28 report carried the `⚑ BOOKMARK` marker, so the TUI
-    // bookmarked it automatically: the row appears in the sidebar and the
-    // marker line itself is hidden from the transcript.
-    await app.waitForFrame((next) => next.includes("★ Bookmark answer 28"))
-    expect(app.captureCharFrame()).not.toContain("⚑ BOOKMARK")
+    // The turn-28 report carried the `⚑ BOOKMARK` marker, so the server
+    // bookmarked it: the row appears in the sidebar and the marker line
+    // itself is hidden from the transcript.
+    expect(frame).toContain("★ Bookmark answer 28")
+    expect(frame).not.toContain("⚑ BOOKMARK")
     // The "My messages" block sits above the bookmarks and lists the user's
     // own messages and question answers newest-first, capped by a nested
     // scroll region. The "Sidebar rail" row is the answer the user picked
@@ -148,14 +186,26 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     await app.waitForFrame((next) => shown(next, "Bookmark answer 29"))
 
     // The leader toggle bookmarks the topmost message; whichever it is, the
-    // store changes, and a second press restores the previous state.
-    const before = (await stored()).length
+    // server marks or unmarks it, and a second press restores the previous
+    // state. The sidebar's count reflects the TUI's local store, so waiting
+    // on it (not just the fixture's array) means the second press reads the
+    // first toggle's outcome instead of a stale view.
+    const bookmarkCount = (frame: string) => headerAt(frame, "Bookmarks")?.line.match(/\((\d+)\)/)?.[1]
+    const before = bookmarkCount(app.captureCharFrame())
+    expect(before).toBe("3")
     app.mockInput.pressKey("x", { ctrl: true })
     app.mockInput.pressKey("f")
-    await app.waitForFrame(async () => (await stored()).length !== before)
+    await app.waitForFrame((next) => bookmarkCount(next) !== before)
     app.mockInput.pressKey("x", { ctrl: true })
     app.mockInput.pressKey("f")
-    await app.waitForFrame(async () => (await stored()).length === before)
+    // The second press also re-marks the message, so the footer star below
+    // must be filled again before it is clicked: the predicate keeps the
+    // frame coming until the optimistic refresh has landed.
+    await app.waitForFrame((next) => {
+      if (bookmarkCount(next) !== before) return false
+      const footers = next.split("\n").filter((line) => line.includes("⧉"))
+      return footers[footers.length - 1]?.includes("★") === true
+    })
 
     // The footer star of the newest reply is filled (pre-seeded); clicking
     // it unbookmarks and that sidebar entry disappears. The reply's footer
@@ -166,7 +216,9 @@ test("bookmarks star, sidebar list, and transcript jump", async () => {
     const starRow = app.captureCharFrame().split("\n").lastIndexOf(footer)
     await app.mockMouse.click(footer.indexOf("★") + 1, starRow)
     await app.waitForFrame((next) => !next.includes("Second answer nine") && next.includes("First prompt zero"))
-    expect((await stored()).map((entry) => entry.messageID)).toEqual([id(0, 0), id(28, 1)])
+    expect(marked()).toEqual([id(0, 0), id(28, 1)])
+    expect(calls.filter((call) => call.startsWith("mark:")).length).toBeGreaterThan(0)
+    expect(calls.filter((call) => call.startsWith("unmark:")).length).toBeGreaterThan(0)
 
     // The bookmarks header's magnifying glass opens a searchable bookmark
     // list. The glyph is a single cell, so the click must land exactly on it.

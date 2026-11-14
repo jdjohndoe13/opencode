@@ -454,6 +454,10 @@ export type SessionMessageCompactionRunning = {
   summary: string
 }
 
+export type MessageBookmarkInfo = { sessionID: SessionID; messageID: SessionMessageID; text: string; created: number }
+
+export type MyMessageInfo = { sessionID: SessionID; messageID: SessionMessageID; text: string; created: number }
+
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
@@ -3064,6 +3068,14 @@ export type ConflictError = {
 export const isConflictError = (value: unknown): value is ConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
+export type SessionArchivedError = {
+  readonly _tag: "SessionArchivedError"
+  readonly sessionID: string
+  readonly message: string
+}
+export const isSessionArchivedError = (value: unknown): value is SessionArchivedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionArchivedError"
+
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
   readonly command: string
@@ -4756,6 +4768,27 @@ export type ExperimentalJobListInput = {
 }
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
+
+export type ExperimentalBookmarkListInput = { readonly sessionID: string }
+
+export type ExperimentalBookmarkListOutput = { data: Array<MessageBookmarkInfo> }["data"]
+
+export type ExperimentalBookmarkMarkInput = {
+  readonly sessionID: string
+  readonly messageID: string
+  readonly text: string
+  readonly created?: number | undefined
+}
+
+export type ExperimentalBookmarkMarkOutput = { data: { bookmarked: boolean } }["data"]
+
+export type ExperimentalBookmarkUnmarkInput = { readonly sessionID: string; readonly messageID: string }
+
+export type ExperimentalBookmarkUnmarkOutput = { data: { removed: boolean } }["data"]
+
+export type ExperimentalMyMessageListInput = { readonly sessionID: string }
+
+export type ExperimentalMyMessageListOutput = { data: Array<MyMessageInfo> }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

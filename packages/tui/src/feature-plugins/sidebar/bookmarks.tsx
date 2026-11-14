@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, For, Show, createSignal } from "solid-js"
-import { sessionBookmarks, useBookmarks } from "../../context/bookmarks"
+import { createMemo, For, Show, createSignal, onMount } from "solid-js"
+import { useBookmarks } from "../../context/bookmarks"
 import { DialogBookmarks } from "../../component/dialog-bookmarks"
 import { Locale } from "../../util/locale"
 
@@ -16,8 +16,14 @@ export function SidebarBookmarks(props: { context: Plugin.Context; sessionID: st
         onJump={(messageID) => bookmarks.request(props.sessionID, messageID)}
       />
     ))
+  // The session route also syncs on load; this covers the sidebar mounting
+  // into a panel whose route already finished syncing.
+  onMount(() => {
+    void bookmarks.sync(props.sessionID).catch((error) => console.error("Failed to sync message bookmarks", error))
+  })
   const list = createMemo(() =>
-    sessionBookmarks(bookmarks.entries(), props.sessionID)
+    bookmarks
+      .list(props.sessionID)
       .toReversed()
       .filter((item) => props.context.data.session.message.get(props.sessionID, item.messageID)),
   )

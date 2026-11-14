@@ -18,7 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
-import { useBookmarks, sessionBookmarks, hasBookmarkMarker, stripBookmarkMarker } from "../../context/bookmarks"
+import { useBookmarks, stripBookmarkMarker } from "../../context/bookmarks"
 import { SplitBorder } from "../../ui/border"
 import { useSessionLinks } from "../../ui/session-link"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -354,6 +354,9 @@ export function Session(props: {
         data.session.sync(sessionID, { children: true }),
         data.session.permission.sync(sessionID).catch(() => undefined),
         data.session.form.sync(sessionID).catch(() => undefined),
+        // The server-derived bookmark and my-message lists load with the
+        // session; live updates piggyback on the message events.
+        bookmarks.sync(sessionID).catch(() => undefined),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -922,40 +925,6 @@ export function Session(props: {
     bookmarks.clearRequested()
     jumpToMessage(pending.messageID)
   })
-  // Bookmarks whose message no longer exists (session deleted, reverted)
-  // are dropped when the session's messages are known.
-  createEffect(() => {
-    const list = messages()
-    if (!list.length) return
-    bookmarks.prune((sessionID, messageID) =>
-      sessionID === route.sessionID ? list.some((message) => message.id === messageID) : true,
-    )
-  })
-  // The agent marks a report it should be bookmarked with a `⚑ BOOKMARK`
-  // line when the user asks it to (see the system prompt). The marker is a
-  // one-time instruction: each completed message is scanned once, so a
-  // manual un-bookmark is not re-added while the session runs. Completed
-  // messages without a marker are remembered too — re-reading every
-  // message's text on every streaming delta is what makes long sessions
-  // crawl.
-  const markerSeen = new Set<string>()
-  createEffect(() => {
-    const boundary = session()?.revert?.messageID
-    for (const message of messages()) {
-      if (message.type !== "assistant" || message.time.completed === undefined) continue
-      if (boundary && message.id >= boundary) continue
-      if (markerSeen.has(message.id)) continue
-      markerSeen.add(message.id)
-      const raw = rawBookmarkText(message)
-      if (!hasBookmarkMarker(raw)) continue
-      bookmarks.mark({
-        sessionID: route.sessionID,
-        messageID: message.id,
-        text: stripBookmarkMarker(raw).replace(/\s+/g, " ").trim(),
-        created: Date.now(),
-      })
-    }
-  })
 
   // The message closest to the top of the viewport, used by the keyboard
   // bookmark toggle. Anchors only exist for mounted rows, so the reader's
@@ -970,7 +939,7 @@ export function Session(props: {
 
   const cycleBookmark = (direction: "next" | "prev") =>
     ensureAllRows(() => {
-      const saved = new Set(sessionBookmarks(bookmarks.entries(), route.sessionID).map((item) => item.messageID))
+      const saved = new Set(bookmarks.list(route.sessionID).map((item) => item.messageID))
       const positions = anchors.messagePositions().filter((item) => saved.has(item.id))
       if (!positions.length) return
       const top = scroll.scrollTop

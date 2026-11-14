@@ -18,6 +18,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
+import { makeBookmark } from "./bookmark"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
@@ -32,6 +33,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
     const schedule = yield* makeSchedule
+    const bookmark = yield* makeBookmark
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -49,6 +51,10 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
       .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
       .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
+      .handle("bookmark.list", (ctx) => bookmark.list(ctx.query.sessionID))
+      .handle("bookmark.mark", (ctx) => bookmark.mark(ctx.payload))
+      .handle("bookmark.unmark", (ctx) => bookmark.unmark(ctx.params.sessionID, ctx.params.messageID))
+      .handle("myMessage.list", (ctx) => bookmark.listMyMessages(ctx.query.sessionID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

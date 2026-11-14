@@ -2526,6 +2526,45 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalBookmarkListInput = { readonly sessionID: Session.ID }
+export type ExperimentalBookmarkListOutput = ReadonlyArray<{
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly text: string
+  readonly created: number
+}>
+export type ExperimentalBookmarkListOperation<E = never> = (
+  input: ExperimentalBookmarkListInput,
+) => Effect.Effect<ExperimentalBookmarkListOutput, E>
+
+export type ExperimentalBookmarkMarkInput = {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly text: string
+  readonly created?: number | undefined
+}
+export type ExperimentalBookmarkMarkOutput = { readonly bookmarked: boolean }
+export type ExperimentalBookmarkMarkOperation<E = never> = (
+  input: ExperimentalBookmarkMarkInput,
+) => Effect.Effect<ExperimentalBookmarkMarkOutput, E>
+
+export type ExperimentalBookmarkUnmarkInput = { readonly sessionID: Session.ID; readonly messageID: SessionMessage.ID }
+export type ExperimentalBookmarkUnmarkOutput = { readonly removed: boolean }
+export type ExperimentalBookmarkUnmarkOperation<E = never> = (
+  input: ExperimentalBookmarkUnmarkInput,
+) => Effect.Effect<ExperimentalBookmarkUnmarkOutput, E>
+
+export type ExperimentalMyMessageListInput = { readonly sessionID: Session.ID }
+export type ExperimentalMyMessageListOutput = ReadonlyArray<{
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly text: string
+  readonly created: number
+}>
+export type ExperimentalMyMessageListOperation<E = never> = (
+  input: ExperimentalMyMessageListInput,
+) => Effect.Effect<ExperimentalMyMessageListOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2556,6 +2595,12 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly bookmark: {
+    readonly list: ExperimentalBookmarkListOperation<E>
+    readonly mark: ExperimentalBookmarkMarkOperation<E>
+    readonly unmark: ExperimentalBookmarkUnmarkOperation<E>
+  }
+  readonly myMessage: { readonly list: ExperimentalMyMessageListOperation<E> }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
