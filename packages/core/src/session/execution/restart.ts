@@ -299,6 +299,9 @@ export const layer = (options?: Options) =>
         }).pipe(
           // A deleted parent owes nothing to the report; clear its row.
           Effect.catchTag("Session.NotFoundError", () => jobs.completeBackground(notificationID)),
+          // An archived parent is read-only; like a deleted one, it owes nothing, so
+          // drop the report and clear its row instead of crashing the sweep.
+          Effect.catchTag("Session.ArchivedError", () => jobs.completeBackground(notificationID)),
           // Retain the formatted outbox row for the next boot: the notification ID is
           // already owned by another item, so deleting it would lose the report.
           Effect.catchTag("Session.SyntheticConflictError", (error) =>
