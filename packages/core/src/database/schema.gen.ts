@@ -38,29 +38,28 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`automation\` (
+        CREATE TABLE \`message_bookmark\` (
           \`id\` text PRIMARY KEY,
-          \`project_id\` text NOT NULL,
-          \`session_id\` text,
-          \`directory\` text NOT NULL,
-          \`name\` text NOT NULL,
-          \`trigger\` text NOT NULL,
-          \`tz\` text NOT NULL,
-          \`action\` text NOT NULL,
-          \`status\` text DEFAULT 'active' NOT NULL,
-          \`next_due_at\` integer,
-          \`expires_at\` integer,
-          \`run_count\` integer DEFAULT 0 NOT NULL,
-          \`failures\` integer DEFAULT 0 NOT NULL,
-          \`last_run_at\` integer,
-          \`last_message_id\` text,
-          \`last_outcome\` text,
-          \`last_output\` text,
-          \`retry_at\` integer,
-          \`state\` text,
-          \`event_position\` text,
+          \`session_id\` text NOT NULL,
+          \`message_id\` text NOT NULL,
+          \`text\` text NOT NULL,
+          \`created\` integer NOT NULL,
           \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_message_bookmark_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`my_message\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`message_id\` text NOT NULL,
+          \`ordinal\` integer NOT NULL,
+          \`text\` text NOT NULL,
+          \`created\` integer NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_my_message_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -163,6 +162,32 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`time_archived\` integer,
           \`sandboxes\` text NOT NULL,
           \`commands\` text
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`schedule\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text,
+          \`name\` text,
+          \`action\` text NOT NULL,
+          \`check\` text,
+          \`when\` text NOT NULL,
+          \`tz\` text NOT NULL,
+          \`status\` text DEFAULT 'active' NOT NULL,
+          \`next_due_at\` integer,
+          \`ends_at\` integer,
+          \`remaining_runs\` integer,
+          \`run_count\` integer DEFAULT 0 NOT NULL,
+          \`checks\` integer DEFAULT 0 NOT NULL,
+          \`failures\` integer DEFAULT 0 NOT NULL,
+          \`last_fired_at\` integer,
+          \`last_message_id\` text,
+          \`last_outcome\` text,
+          \`retry_at\` integer,
+          \`state\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_schedule_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -324,11 +349,14 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           CONSTRAINT \`fk_worktree_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`CREATE INDEX \`automation_project_idx\` ON \`automation\` (\`project_id\`);`)
-      yield* tx.run(`CREATE INDEX \`automation_session_idx\` ON \`automation\` (\`session_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`automation_active_idx\` ON \`automation\` (\`next_due_at\`) WHERE "automation"."status" = 'active';`,
+        `CREATE UNIQUE INDEX \`message_bookmark_session_message_idx\` ON \`message_bookmark\` (\`session_id\`,\`message_id\`);`,
       )
+      yield* tx.run(`CREATE INDEX \`message_bookmark_session_idx\` ON \`message_bookmark\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`my_message_session_message_ordinal_idx\` ON \`my_message\` (\`session_id\`,\`message_id\`,\`ordinal\`);`,
+      )
+      yield* tx.run(`CREATE INDEX \`my_message_session_idx\` ON \`my_message\` (\`session_id\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
@@ -337,6 +365,10 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE UNIQUE INDEX \`machine_key_idx\` ON \`machine\` (\`key\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
+      )
+      yield* tx.run(`CREATE INDEX \`schedule_session_idx\` ON \`schedule\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`schedule_due_idx\` ON \`schedule\` (\`next_due_at\`) WHERE "schedule"."status" = 'active' and "schedule"."next_due_at" is not null;`,
       )
       yield* tx.run(`CREATE INDEX \`blob_ref_hash_idx\` ON \`blob_ref\` (\`hash\`);`)
       yield* tx.run(`CREATE INDEX \`blob_ref_session_seq_idx\` ON \`blob_ref\` (\`session_id\`,\`seq\`);`)

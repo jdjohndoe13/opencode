@@ -1,5 +1,5 @@
 import { createMemo, onMount } from "solid-js"
-import { sessionBookmarks, useBookmarks } from "../context/bookmarks"
+import { useBookmarks } from "../context/bookmarks"
 import { useData } from "../context/data"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
@@ -17,7 +17,8 @@ export function DialogBookmarks(props: { sessionID: string; onJump: (messageID: 
   })
 
   const options = createMemo((): DialogSelectOption<string>[] =>
-    sessionBookmarks(bookmarks.entries(), props.sessionID)
+    bookmarks
+      .list(props.sessionID)
       .toReversed()
       .filter((item) => data.session.message.get(props.sessionID, item.messageID))
       .map((item) => ({

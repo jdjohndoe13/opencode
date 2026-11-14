@@ -39,6 +39,7 @@ import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Automation } from "@opencode/core/automation"
+import { Bookmark } from "@opencode/core/bookmark"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -109,6 +110,7 @@ const applicationServiceNodes = [
   // Started with the server, so its leader election and polling resume jobs even before anyone calls the video API.
   VideoGeneration.node,
   SessionSearchBuild.node,
+  Bookmark.node,
   Workspace.node,
   // The machine list: where a carrier hands over the workers dialing in from other computers.
   Machines.node,

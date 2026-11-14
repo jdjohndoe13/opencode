@@ -21,6 +21,7 @@ import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
 import { makeBrowserTunnel } from "./experimental/browser-tunnel"
 import { makeAutomation } from "./automation"
+import { makeBookmark } from "./bookmark"
 import { makeJob } from "./job"
 import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
@@ -43,6 +44,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const machineLink = yield* makeMachineLink
     const browserTunnel = yield* makeBrowserTunnel
     const push = yield* makePush
+    const bookmark = yield* makeBookmark
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -81,6 +83,10 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("automation.pause", (ctx) => automation.pause(ctx.params.automationID))
       .handle("automation.resume", (ctx) => automation.resume(ctx.params.automationID))
       .handle("automation.delete", (ctx) => automation.remove(ctx.params.automationID))
+      .handle("bookmark.list", (ctx) => bookmark.list(ctx.query.sessionID))
+      .handle("bookmark.mark", (ctx) => bookmark.mark(ctx.payload))
+      .handle("bookmark.unmark", (ctx) => bookmark.unmark(ctx.params.sessionID, ctx.params.messageID))
+      .handle("myMessage.list", (ctx) => bookmark.listMyMessages(ctx.query.sessionID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

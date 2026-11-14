@@ -2,6 +2,7 @@ import { ArtifactEndpoints } from "./artifact.js"
 import { BlobGetEndpoint } from "./blob.js"
 import { BrowserTunnelEndpoint } from "./experimental/browser-tunnel.js"
 import { AutomationEndpoints } from "./automation.js"
+import { BookmarkEndpoints } from "./bookmark.js"
 import { JobEndpoints } from "./job.js"
 import { MachineEndpoints } from "./machine.js"
 import { SpaceEndpoints } from "./space.js"
@@ -20,4 +21,5 @@ export const ExperimentalGroup = PersistentPtyGroup.add(
   ...MachineEndpoints,
   ...PushEndpoints,
   ...SpaceEndpoints,
+  ...BookmarkEndpoints,
 )

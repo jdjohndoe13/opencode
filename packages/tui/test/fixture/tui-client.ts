@@ -149,6 +149,14 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (/^\/api\/session\/[^/]+\/permission$/.test(url.pathname)) return json({ data: [] })
     if (/^\/api\/session\/[^/]+\/form$/.test(url.pathname)) return json({ data: [] })
     if (/^\/api\/experimental\/session\/[^/]+\/terminal$/.test(url.pathname)) return json({ data: [] })
+    // The server-derived bookmark and my-message lists. Tests seed and mutate
+    // them through the fetch override; the defaults keep the store empty.
+    if (url.pathname === "/api/experimental/bookmark" && request.method === "GET") return json({ data: [] })
+    if (url.pathname === "/api/experimental/bookmark" && request.method === "POST")
+      return json({ data: { bookmarked: true } })
+    if (/^\/api\/experimental\/bookmark\/[^/]+\/[^/]+$/.test(url.pathname) && request.method === "DELETE")
+      return json({ data: { removed: true } })
+    if (url.pathname === "/api/experimental/my-message" && request.method === "GET") return json({ data: [] })
     if (
       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
         url.pathname,
