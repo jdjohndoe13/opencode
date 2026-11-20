@@ -4,6 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { createServer } from "node:http"
+import { createHash } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -87,6 +88,84 @@ describe("web UI", () => {
       const authorized = yield* Effect.promise(() => fetch(new URL("/api/info", origin), { headers: { cookie } }))
       expect(authorized.status).toBe(200)
       yield* Effect.promise(() => authorized.arrayBuffer())
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  )
+
+  it.live("serves the web app and the API under a base path", () =>
+    Effect.gen(function* () {
+      const theme = "document.documentElement.dataset.theme = 'dark'"
+      const transform = yield* WebUi.handler({
+        basePath: "/oc/test",
+        assets: {
+          "index.html": `<html><head><script id="oc-theme-preload-script">${theme}</script><link rel="manifest" href="/site.webmanifest" /></head><body><script type="module" src="/_assets/app.js"></script><a href="//example.com">ext</a></body></html>`,
+          "_assets/app.js": "console.log('prefixed')",
+          "site.webmanifest": JSON.stringify({ id: "/" }),
+        },
+      })
+      const server = yield* ServerProcess.start<never, never>(
+        { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: ":memory:" } },
+        undefined,
+        transform,
+      )
+      const origin = HttpServer.formatAddress(server.address)
+      const authorization = { authorization: `Basic ${btoa("opencode:secret")}` }
+      const get = (pathname: string, init?: RequestInit) => Effect.promise(() => fetch(`${origin}${pathname}`, init))
+
+      // The HTML is rewritten: the base global is injected and root-absolute references are prefixed.
+      for (const pathname of ["/oc/test/", "/oc/test/settings"]) {
+        const page = yield* get(pathname)
+        const html = yield* Effect.promise(() => page.text())
+        expect(page.status).toBe(200)
+        expect(html).toContain('<script>window.__OPENCODE_BASE__="/oc/test";</script>')
+        expect(html).toContain('src="/oc/test/_assets/app.js"')
+        expect(html).toContain('href="/oc/test/site.webmanifest"')
+        // Protocol-relative and already-prefixed references stay untouched.
+        expect(html).toContain('href="//example.com"')
+        // The CSP carries the injected script's hash next to the theme script's.
+        const csp = page.headers.get("content-security-policy") ?? ""
+        expect(csp).toContain(
+          `'sha256-${createHash("sha256").update(theme).digest("base64")}'`,
+        )
+        expect(csp).toContain(
+          `'sha256-${createHash("sha256").update('window.__OPENCODE_BASE__="/oc/test";').digest("base64")}'`,
+        )
+      }
+
+      const script = yield* get("/oc/test/_assets/app.js")
+      expect(script.status).toBe(200)
+      expect(yield* Effect.promise(() => script.text())).toBe("console.log('prefixed')")
+
+      // The bare prefix is served as the app root.
+      const bare = yield* get("/oc/test")
+      expect(bare.status).toBe(200)
+      expect(yield* Effect.promise(() => bare.text())).toContain("__OPENCODE_BASE__")
+
+      // Paths outside the prefix are not served…
+      for (const pathname of ["/", "/settings", "/_assets/app.js"]) {
+        const outside = yield* get(pathname, { headers: authorization })
+        expect(outside.status).toBe(404)
+        yield* Effect.promise(() => outside.arrayBuffer())
+      }
+
+      // …while the API answers on the stripped path, and stays reachable at the root for local clients.
+      const info = yield* get("/oc/test/api/info", { headers: authorization })
+      expect(info.status).toBe(200)
+      expect(yield* Effect.promise(() => info.json())).toHaveProperty("pid")
+      const rootInfo = yield* get("/api/info", { headers: authorization })
+      expect(rootInfo.status).toBe(200)
+      yield* Effect.promise(() => rootInfo.arrayBuffer())
+
+      // A pairing link opened in a browser returns to the mounted UI, not the root.
+      const pairing = yield* get("/oc/test/api/pair", { method: "POST", headers: authorization }).pipe(
+        Effect.flatMap((response) => Effect.promise(() => response.json() as Promise<{ code: string }>)),
+      )
+      const connected = yield* get(`/oc/test/auth/connect/${pairing.code}`, {
+        redirect: "manual",
+        headers: { accept: "text/html" },
+      })
+      expect(connected.status).toBe(302)
+      expect(connected.headers.get("location")).toBe("/oc/test/")
+      yield* Effect.promise(() => connected.arrayBuffer())
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
 

@@ -7,6 +7,7 @@ import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/runtime/i18n/language"
 import { PlatformProvider } from "@/runtime/platform/platform"
 import { createWebPlatform } from "@/runtime/platform/web"
+import { basePath } from "@/runtime/platform/base-path"
 import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/platform/pwa"
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
@@ -52,7 +53,10 @@ const clearAuthToken = () => {
 // package.json carries the last stable version on every channel, so the server's build passes its own release.
 const web = createWebPlatform(import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version)
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+// The generated service worker's precache and navigation fallback are built for its own base, and its API/auth
+// denylist is root-anchored, so under a runtime `--base-path` prefix it would answer pairing links with the app
+// shell instead of letting them reach the server. The PWA is soft; the UI works without it.
+if (import.meta.env.PROD && "serviceWorker" in navigator && basePath === "") {
   window.addEventListener("load", () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`), {
     once: true,
   })

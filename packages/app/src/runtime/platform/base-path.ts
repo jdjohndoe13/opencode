@@ -1,5 +1,12 @@
-/** The path a build is served under, such as `/opencode`, without a trailing slash; empty at the root. */
-export const basePath = normalizeBasePath(import.meta.env.BASE_URL)
+/**
+ * The path the app is served under, such as `/opencode`, without a trailing slash; empty at the root. The server's
+ * `--base-path` transform injects `window.__OPENCODE_BASE__` before any script runs, which wins over the build-time
+ * `BASE_URL` so one binary serves any prefix; a build made with `vite build --base=/x/` still works on its own.
+ */
+export const basePath = normalizeBasePath(
+  (typeof window === "undefined" ? undefined : (window as { __OPENCODE_BASE__?: string }).__OPENCODE_BASE__) ??
+    import.meta.env.BASE_URL,
+)
 
 export function normalizeBasePath(base: string | undefined) {
   const trimmed = (base ?? "").replace(/^\/+|\/+$/g, "")

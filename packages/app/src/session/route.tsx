@@ -288,10 +288,14 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
 function SessionDocumentTitle(props: { title: () => string | undefined }) {
-  // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
+  // The Title mounts once and its text updates through a memo. A keyed <Show> re-creates the meta tag on every
+  // title change; the re-creation can land inside a router-navigation transition, where the owner chain no
+  // longer carries the app's MetaContext and useHead throws.
+  const text = createMemo(() => (props.title() ? `${props.title()} · OpenCode` : "OpenCode"))
+
   return (
-    <Show when={props.title()} keyed>
-      {(value) => <Title>{`${value} · OpenCode`}</Title>}
+    <Show when={text()}>
+      <Title>{text()}</Title>
     </Show>
   )
 }

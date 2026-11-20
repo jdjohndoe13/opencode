@@ -27,6 +27,7 @@ export type Options = {
   readonly mode: Mode
   readonly hostname?: string
   readonly port?: number
+  readonly basePath?: string
   readonly cors?: readonly string[]
 }
 
@@ -100,7 +101,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
-      const transform = yield* WebUi.handler()
+      const cors = options.cors ?? config.cors
+      const transform = yield* WebUi.handler({ basePath: options.basePath, cors })
       const remote = { urls: [] as ReadonlyArray<string> }
       const launch = start(
         {
