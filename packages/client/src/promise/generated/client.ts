@@ -313,6 +313,14 @@ import type {
   ExperimentalSpaceUnsubscribeInput,
   ExperimentalSpaceUnsubscribeOutput,
   ExperimentalSpaceResetOutput,
+  ExperimentalBookmarkListInput,
+  ExperimentalBookmarkListOutput,
+  ExperimentalBookmarkMarkInput,
+  ExperimentalBookmarkMarkOutput,
+  ExperimentalBookmarkUnmarkInput,
+  ExperimentalBookmarkUnmarkOutput,
+  ExperimentalMyMessageListInput,
+  ExperimentalMyMessageListOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -851,7 +859,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/shell`,
             body: { id: input["id"], command: input["command"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 409],
             empty: true,
           },
           requestOptions,
@@ -993,7 +1001,7 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/background`,
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 409],
             empty: true,
           },
           requestOptions,
@@ -1147,7 +1155,7 @@ export function make(options: ClientOptions) {
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/skill`,
               body: { id: input["id"], resume: input["resume"] },
               successStatus: 204,
-              declaredStatuses: [400, 401, 404, 502],
+              declaredStatuses: [400, 401, 404, 409, 502],
               empty: true,
             },
             requestOptions,
@@ -2050,6 +2058,62 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      bookmark: {
+        list: (input: ExperimentalBookmarkListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBookmarkListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/bookmark`,
+              query: { sessionID: input["sessionID"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        mark: (input: ExperimentalBookmarkMarkInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBookmarkMarkOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/bookmark`,
+              body: {
+                sessionID: input["sessionID"],
+                messageID: input["messageID"],
+                text: input["text"],
+                created: input["created"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        unmark: (input: ExperimentalBookmarkUnmarkInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBookmarkUnmarkOutput }>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/bookmark/${encodeURIComponent(input.sessionID)}/${encodeURIComponent(input.messageID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      myMessage: {
+        list: (input: ExperimentalMyMessageListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalMyMessageListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/my-message`,
+              query: { sessionID: input["sessionID"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
       },
       migration: {
         v1: {
