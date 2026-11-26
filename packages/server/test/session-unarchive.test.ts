@@ -13,7 +13,8 @@ const makeRequest = Effect.fn(function* () {
     fs: { filewatcher: false },
     models: { fetch: false },
   })
-  return (path: string, method: string, body?: unknown) =>
+  // Fork: pass expectedStatus when the route is expected to fail closed (e.g. 409 on archived input).
+  return (path: string, method: string, body?: unknown, expectedStatus?: number) =>
     Effect.promise(async () => {
       const response = await handler(
         new Request(`http://opencode.local${path}`, {
@@ -22,7 +23,8 @@ const makeRequest = Effect.fn(function* () {
           body: body === undefined ? undefined : JSON.stringify(body),
         }),
       )
-      expect(response.status).toBeLessThan(300)
+      if (expectedStatus !== undefined) expect(response.status).toBe(expectedStatus)
+      else expect(response.status).toBeLessThan(300)
       return response.status === 204 ? undefined : response.json()
     })
 })
@@ -61,12 +63,13 @@ it.live("a user shell command unarchives an archived session", () =>
   }).pipe(Effect.scoped),
 )
 
+// Fork: archived sessions are read-only, so synthetic input fails closed with 409 and stays archived.
 it.live("synthetic input leaves an archived session archived", () =>
   Effect.gen(function* () {
     const request = yield* makeRequest()
     const session = yield* archivedSession(request)
 
-    yield* request(`/api/session/${session.id}/synthetic`, "POST", { text: "background notice", resume: false })
+    yield* request(`/api/session/${session.id}/synthetic`, "POST", { text: "background notice", resume: false }, 409)
 
     expect(yield* session.archived()).toBe(true)
   }).pipe(Effect.scoped),

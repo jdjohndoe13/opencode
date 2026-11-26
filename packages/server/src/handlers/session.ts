@@ -296,6 +296,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
+          // Fork: the core write gate fails closed on archived sessions, so the
+          // unarchive must happen before the prompt call, not after it.
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           const data = yield* session
             .prompt({
               sessionID: ctx.params.sessionID,
@@ -335,6 +338,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.command",
         Effect.fn(function* (ctx) {
+          // Fork: the core write gate fails closed on archived sessions, so the
+          // unarchive must happen before the command call, not after it.
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           yield* session
             .command({
               sessionID: ctx.params.sessionID,
@@ -372,6 +378,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.skill",
         Effect.fn(function* (ctx) {
+          // Fork: the core write gate fails closed on archived sessions, so the
+          // unarchive must happen before the skill call, not after it.
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           yield* session
             .skill({
               sessionID: ctx.params.sessionID,
